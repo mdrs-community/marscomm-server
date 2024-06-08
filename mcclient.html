@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shoelace UI Example</title>
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.0.0-beta.63/dist/shoelace.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.0.0-beta.63/dist/themes/light.css">
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      margin: 0;
+      overflow: hidden;
+    }
+    .top-panel {
+      display: flex;
+      align-items: center;
+      padding: 0.5rem;
+      background-color: #f1f1f1;
+      border-bottom: 1px solid #ddd;
+    }
+    .container {
+      display: flex;
+      flex: 1;
+      width: 100%;
+      overflow: hidden;
+    }
+    .chat-panel-container {
+      display: flex;
+      flex-direction: column;
+      flex: 2;
+      border-right: 1px solid #ddd;
+      height: 100%;
+    }
+    .chat-panel {
+      flex: 1;
+      padding: 1rem;
+      overflow-y: auto;
+    }
+    .chat-input-container {
+      padding: 0.5rem;
+      border-top: 1px solid #ddd;
+      display: flex;
+      align-items: center;
+    }
+    .chat-input-container sl-input {
+      flex: 1;
+    }
+    .right-panel {
+      flex: 1;
+      padding: 1rem;
+      overflow-y: auto;
+    }
+    .item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .item sl-button {
+      margin: 0 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-panel">
+    <label for="number-input">Choose a number: </label>
+    <sl-input id="number-input" type="number" min="1" style="margin-left: 1rem;"></sl-input>
+    <sl-button style="margin-left: 1rem;" onclick="addContent()">Add to Chat</sl-button>
+  </div>
+  <div class="container">
+    <div class="chat-panel-container">
+      <div class="chat-panel" id="chat-panel">
+        <h2>Chat Panel</h2>
+        <!-- Chat content will be added here -->
+      </div>
+      <div class="chat-input-container">
+        <sl-input id="chat-message" placeholder="Type a message..." clearable></sl-input>
+        <sl-button style="margin-left: 1rem;" onclick="sendMessage()">Send</sl-button>
+      </div>
+    </div>
+    <div class="right-panel">
+      <h2>Items</h2>
+      <div class="item">
+        <sl-icon name="folder-open"></sl-icon>
+        <sl-button size="small">Upload</sl-button>
+        <span>Item 1 description</span>
+      </div>
+      <div class="item">
+        <sl-icon name="folder-open"></sl-icon>
+        <sl-button size="small">Upload</sl-button>
+        <span>Item 2 description</span>
+      </div>
+      <div class="item">
+        <sl-icon name="folder-open"></sl-icon>
+        <sl-button size="small">Upload</sl-button>
+        <span>Item 3 description</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function addContent() {
+      const chatPanel = document.getElementById('chat-panel');
+      const numberInput = document.getElementById('number-input');
+      const number = parseInt(numberInput.value, 10);
+
+      if (isNaN(number) || number < 1) {
+        alert('Please enter a valid number.');
+        return;
+      }
+
+      for (let i = 0; i < number; i++) {
+        const newMessage = document.createElement('p');
+        newMessage.textContent = `New message ${i + 1}`;
+        chatPanel.appendChild(newMessage);
+      }
+      chatPanel.scrollTop = chatPanel.scrollHeight; // Scroll to bottom
+    }
+
+    function sendMessage() {
+      const chatPanel = document.getElementById('chat-panel');
+      const chatMessageInput = document.getElementById('chat-message');
+      const message = chatMessageInput.value.trim();
+
+      if (!message) {
+        alert('Please enter a message.');
+        return;
+      }
+
+      // Simple markdown and emoticon parsing
+      const formattedMessage = parseMessage(message);
+      const newMessage = document.createElement('div');
+      newMessage.innerHTML = formattedMessage;
+      chatPanel.appendChild(newMessage);
+
+      chatMessageInput.value = '';
+      chatPanel.scrollTop = chatPanel.scrollHeight; // Scroll to bottom
+    }
+
+    function parseMessage(message) {
+      // Replace basic emoticons
+      message = message.replace(/:\)/g, '😊');
+      message = message.replace(/:\(/g, '😞');
+
+      // Replace markdown formatting
+      message = message.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      message = message.replace(/__(.*?)__/g, '<em>$1</em>');
+      message = message.replace(/`(.*?)`/g, '<code>$1</code>');
+
+      return message;
+    }
+  </script>
+</body>
+</html>
