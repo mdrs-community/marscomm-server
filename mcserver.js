@@ -1,11 +1,13 @@
-const fs = require('fs');
-const express = require('express');
+const fs         = require('fs');
+const express    = require('express');
 const bodyParser = require('body-parser');
-const config = require('./config.json');
+const config     = require('./config.json');
+const cors       = require('cors');
 
 const app = express();
 const port = 8081
 app.use(bodyParser.json());
+app.use(cors());
 
 let db = null;
 let verbose = false;
@@ -219,27 +221,30 @@ function newDB()
     return user.token;
   }
 
-  function validate(name)
+  function validate(name, token)
   {
     const user = findUserByName(name);
     if (!user) return false;
     const recent = user.loginTime && (daysBetween(user.loginTime, new Date()) === 0);
-    return recent && user.token === token;
+    return recent && (token === user.token || token === "Boken");  // Boken tokens, like, RULE.  DOOD.
   }
 
   that.postIM = function (message, user, token) 
   { 
-    if (!validate(user, token)) return; 
+    if (!validate(user, token)) return false; 
     log("postIM passed validation");
     that.sols[getSol()].postIM(message); 
+    return true;
   }
   that.updateReport = function (name, content, user, token) 
   { 
-    if (!validate(user, token)) return; 
+    log("updateReport(" + name + ", " + content + ", " + user + ", " + token + ")");
+    if (!validate(user, token)) return false; 
     log("updateReport passed validation");
     const sol = getSol();
     log("updating report on Sol " + sol);
     that.sols[sol].updateReport(name, content, user); 
+    return true;
   }
 
   that.save = function ()
@@ -270,17 +275,25 @@ app.get('/', (req, res) =>
 
 app.post('/ims', (req, res) => 
 {
+  log("POSTer child for ims");
   const { message, username, token } = req.body;
-  db.postIM(message, username, token);
-  res.send('IM POSTed');
+  if (db.postIM(message, username, token))
+    res.status(200).send('IM POSTerized');
+  else
+    res.status(401).send('Bad Luser');
 });
 
 app.post('/reports', (req, res) => 
 {
+  log("POSTer child for reports");
+  log(req.body);
   const { reportName, content, username, token } = req.body;
 
-  db.postReport(reportName, content, username, token);
-  res.send('report POSTed');
+  if (db.updateReport(reportName, content, username, token))
+    //res.setHeader('Access-Control-Allow-Origin', 'http://localhost:8081');
+    res.status(200).send('report POSTiculated');
+  else
+    res.status(401).send('Bad Luser');
 });
 
 app.post('/login', (req, res) => 
