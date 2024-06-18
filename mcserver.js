@@ -95,12 +95,15 @@ POST reports { user: <lusermame>, reportName: <str>, content: <str> }
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Model
 
+function commsDelay()   // commsDelay is the 1-way delay in seconds; -1 means track actual Mars delay
+{ //TODO: compute actual Mars comm delay here instead of using hardwired 30
+  return (config.commsDelay == -1) ? 30 : config.commsDelay;
+}
+
 function commsDelayPassed(sentTime)
 {
   const now = new Date();
-  // commsDelay is the 1-way delay in seconds; -1 means track actual Mars delay
-  if (config.commsDelay == -1) return 30; //TODO: compute actual Mars comm delay here
-  return (now - sentTime) * 1000 >= config.commsDelay;
+  return (now - sentTime) * 1000 >= commsDelay();
 }
 
 function newReport(name)
@@ -109,16 +112,19 @@ function newReport(name)
 
 	that.name = name;
   that.content = "";
+  that.transmitted = false; // "transmitting" means sending the preport from Mars to Earth (or possibly vice versa).  A report can be on the server but not transmitted.
   that.time = new Date();
 
   that.filled = function () { return that.content.length > 0; }
-  that.received = function () { return commsDelayPassed(that.time); }
+  that.received = function () { return that.transmitted && commsDelayPassed(that.time); }
   that.update = function (content, by)
   {
     that.content = content;
     that.author = by;
     that.time = new Date();
   }
+
+  that.transmit = function () { that.transmitted = true; }
 
   return that;
 }
@@ -176,6 +182,13 @@ function newSol(solNum)
     const report = findReportByName(name);
     if (report) report.update(content, by);
     else Log("can't update non-existant report " + name);
+  }
+
+  that.transmitReport = function (name)
+  {
+    const report = findReportByName(name);
+    if (report) report.transmit();
+    else Log("can't transmit non-existant report " + name);
   }
 
   return that;
@@ -236,6 +249,7 @@ function newDB()
     that.sols[getSol()].postIM(message); 
     return true;
   }
+
   that.updateReport = function (name, content, user, token) 
   { 
     log("updateReport(" + name + ", " + content + ", " + user + ", " + token + ")");
@@ -244,6 +258,16 @@ function newDB()
     const sol = getSol();
     log("updating report on Sol " + sol);
     that.sols[sol].updateReport(name, content, user); 
+    return true;
+  }
+
+  that.transmitReport = function (name, user, token) 
+  { 
+    log("transmitReport(" + name + ", " + user + ", " + token + ")");
+    if (!validate(user, token)) return false; 
+    const sol = getSol();
+    log("updating report on Sol " + sol);
+    that.sols[sol].transmitReport(name); 
     return true;
   }
 
@@ -273,6 +297,18 @@ app.get('/', (req, res) =>
   res.send('Hello Facture!');
 });
 
+app.get('/comms-delay', (req, res) => 
+{
+  res.status(200).json({ commsDelay: commsDelay() });
+});
+
+app.get('/sols/:sol', (req, res) => 
+{
+  const sol = req.params.sol;
+  log("getting Sol " + sol);
+  res.status(200).json(db.sols[sol]);
+});
+
 app.post('/ims', (req, res) => 
 {
   log("POSTer child for ims");
@@ -283,17 +319,41 @@ app.post('/ims', (req, res) =>
     res.status(401).send('Bad Luser');
 });
 
-app.post('/reports', (req, res) => 
+app.get('/reports', (req, res) => 
 {
-  log("POSTer child for reports");
+  log("goGETer them reports");
+  let reports = [];
+  for (let i = 0; i < config.dailyReports.length; i++)
+    reports.push(config.dailyReports[i]);
+  for (let i = 0; i < config.specialReports.length; i++)
+    reports.push(config.specialReports[i].name);
+  res.status(200).json(reports);
+});
+
+// The client never actually creates reports -- they preexist in an empty state on the server. 
+// The client can update or transmit reports.
+app.post('/reports/update', (req, res) => 
+{
+  log("POSTer child for updated reports");
   log(req.body);
   const { reportName, content, username, token } = req.body;
 
   if (db.updateReport(reportName, content, username, token))
     //res.setHeader('Access-Control-Allow-Origin', 'http://localhost:8081');
-    res.status(200).send('report POSTiculated');
+    res.status(200).json({ message:'report POSTiculated'});
   else
-    res.status(401).send('Bad Luser');
+    res.status(401).json({ message:'Bad Luser'});
+});
+
+app.post('/reports/transmit/:name', (req, res) => 
+{
+  log("transmitting the vir...ummh...report");
+
+  if (db.transmitReport(reportName, username, token))
+    //res.setHeader('Access-Control-Allow-Origin', 'http://localhost:8081');
+    res.status(200).json({ message:'report transmitted'});
+  else
+    res.status(401).json({ message:'Bad Luser'});
 });
 
 app.post('/login', (req, res) => 
