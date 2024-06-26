@@ -113,15 +113,15 @@ function newReport(name)
 	that.name = name;
   that.content = "";
   that.transmitted = false; // "transmitting" means sending the preport from Mars to Earth (or possibly vice versa).  A report can be on the server but not transmitted.
-  that.time = new Date();
+  that.xmitTime = new Date();
 
   that.filled = function () { return that.content.length > 0; }
-  that.received = function () { return that.transmitted && commsDelayPassed(that.time); }
+  that.received = function () { return that.transmitted && commsDelayPassed(that.xmitTime); }
   that.update = function (content, by)
   {
     that.content = content;
     that.author = by;
-    that.time = new Date();
+    that.xmitTime = new Date();
   }
 
   that.transmit = function () { that.transmitted = true; }
@@ -345,9 +345,12 @@ app.post('/reports/update', (req, res) =>
     res.status(401).json({ message:'Bad Luser'});
 });
 
-app.post('/reports/transmit/:name', (req, res) => 
+app.post('/reports/transmit/:reportName', (req, res) => 
 {
   log("transmitting the vir...ummh...report");
+  log(req.body);
+  const { username, token } = req.body;
+  const reportName = req.params.reportName;
 
   if (db.transmitReport(reportName, username, token))
     //res.setHeader('Access-Control-Allow-Origin', 'http://localhost:8081');
