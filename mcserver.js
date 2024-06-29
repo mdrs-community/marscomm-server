@@ -133,7 +133,7 @@ function newIM(content)
 {
 	var that = { };
 
-  that.content = "";
+  that.content = content;
   that.time = new Date();
 
   that.received = function () { return commsDelayPassed(that.time); }
@@ -197,12 +197,13 @@ function newSol(solNum)
 function newDB()
 {
 	var that = { };
-  const startDate = new Date();
+  that.startDate = new Date();
+  log("startDate is " + that.startDate.toDateString());
 
   function getSol()
   {
     const now = new Date();
-    return daysBetween(startDate, now);
+    return daysBetween(that.startDate, now);
   }
 
   that.sols = [];
@@ -245,7 +246,7 @@ function newDB()
   that.postIM = function (message, user, token) 
   { 
     if (!validate(user, token)) return false; 
-    log("postIM passed validation");
+    log("postIM passed validation on Sol " + getSol() + ": " + message);
     that.sols[getSol()].postIM(message); 
     return true;
   }
@@ -281,6 +282,7 @@ function newDB()
     log("Here's what you get, Holmez");
     log(ddb);
     that.sols = ddb.sols;
+    that.startDate = ddb.startDate;
   }
 
   return that;
@@ -297,6 +299,11 @@ app.get('/', (req, res) =>
   res.send('Hello Facture!');
 });
 
+app.get('/start-date', (req, res) => 
+{
+  res.status(200).json({ startDate: db.startDate });
+});
+
 app.get('/comms-delay', (req, res) => 
 {
   res.status(200).json({ commsDelay: commsDelay() });
@@ -306,6 +313,7 @@ app.get('/sols/:sol', (req, res) =>
 {
   const sol = req.params.sol;
   log("getting Sol " + sol);
+  log(db.sols[sol]);
   res.status(200).json(db.sols[sol]);
 });
 
@@ -314,9 +322,9 @@ app.post('/ims', (req, res) =>
   log("POSTer child for ims");
   const { message, username, token } = req.body;
   if (db.postIM(message, username, token))
-    res.status(200).send('IM POSTerized');
+    res.status(200).json( { message: 'IM POSTerized' } );
   else
-    res.status(401).send('Bad Luser');
+    res.status(401).json( { message: 'Bad Luser' } );
 });
 
 app.get('/reports', (req, res) => 
