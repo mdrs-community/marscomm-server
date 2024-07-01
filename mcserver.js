@@ -129,14 +129,16 @@ function newReport(name)
   return that;
 }
 
-function newIM(content)
+function newIM(content, user)
 {
 	var that = { };
 
   that.content = content;
-  that.time = new Date();
+  that.user = user;
+  that.xmitTime = new Date();
+  that.transmitted = true;
 
-  that.received = function () { return commsDelayPassed(that.time); }
+  that.received = function () { return commsDelayPassed(that.xmitTime); }
   
   return that;
 }
@@ -171,9 +173,9 @@ function newSol(solNum)
     return null;
   }
 
-  that.postIM = function (message)
+  that.postIM = function (content, user)
   {    
-    const im = newIM(message);
+    const im = newIM(content, user);
     this.ims.push(im);
   }
 
@@ -247,7 +249,7 @@ function newDB()
   { 
     if (!validate(user, token)) return false; 
     log("postIM passed validation on Sol " + getSol() + ": " + message);
-    that.sols[getSol()].postIM(message); 
+    that.sols[getSol()].postIM(message, user); 
     return true;
   }
 
