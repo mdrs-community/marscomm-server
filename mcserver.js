@@ -124,7 +124,7 @@ function newReport(name)
     that.xmitTime = new Date();
   }
 
-  that.transmit = function () { that.transmitted = true; }
+  that.transmit = function () { that.transmitted = true; that.xmitTime = new Date(); }
 
   return that;
 }
@@ -199,7 +199,8 @@ function newSol(solNum)
 function newDB()
 {
 	var that = { };
-  that.startDate = new Date();
+  const now = new Date();
+  that.startDate = new Date(now.getTime() - (config.startingSolNum * 24 * 60 * 60 * 1000));
   log("startDate is " + that.startDate.toDateString());
 
   function getSol()
