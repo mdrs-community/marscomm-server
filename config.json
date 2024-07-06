@@ -1,6 +1,6 @@
 {
     "rotationLength": 12,
-    "startingSolNum": 2,
+    "startingSolNum": 0,
     "commsDelay": 10, 
     "dailyReports": [ "GreenHab", "Journalist", "Commander", "Operations", "EVAa", "EVAb" ],
     "specialReports": [ { "name": "Mid-rotation", "due": 5 }, { "name": "Final", "due": 11 } ],
