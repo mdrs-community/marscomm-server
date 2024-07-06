@@ -160,7 +160,7 @@ function newSol(solNum)
   {
     if (specialReports[i].due == solNum)
     {
-      const report = newReport(specialReports[i]);
+      const report = newReport(specialReports[i].name);
       that.reports.push(report);
     }
   }
