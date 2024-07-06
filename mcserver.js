@@ -158,7 +158,7 @@ function newSol(solNum)
   const specialReports = config.specialReports;
   for (let i = 0; i < specialReports.length; i++)
   {
-    if (specialReports[i].sol == solNum)
+    if (specialReports[i].due == solNum)
     {
       const report = newReport(specialReports[i]);
       that.reports.push(report);
