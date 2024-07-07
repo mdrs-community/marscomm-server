@@ -106,10 +106,20 @@ function commsDelayPassed(sentTime)
   return (now - sentTime) * 1000 >= commsDelay();
 }
 
+function findUserByName(name)
+{
+  let users = config.users;
+  for (let i = 0; i < users.length; i++)
+    if (users[i].name === name) return users[i];
+  return null;
+}
+
+
 function newReport(name)
 {
 	var that = { };
 
+  that.type = "Report";
 	that.name = name;
   that.content = "";
   that.transmitted = false; // "transmitting" means sending the preport from Mars to Earth (or possibly vice versa).  A report can be on the server but not transmitted.
@@ -129,12 +139,14 @@ function newReport(name)
   return that;
 }
 
-function newIM(content, user)
+function newIM(content, username)
 {
 	var that = { };
 
+  that.type = "IM";
   that.content = content;
-  that.user = user;
+  that.user = username;
+  that.planet = findUserByName(username).planet;
   that.xmitTime = new Date();
   that.transmitted = true;
 
@@ -177,6 +189,7 @@ function newSol(solNum)
   {    
     const im = newIM(content, user);
     this.ims.push(im);
+    return im;
   }
 
   that.updateReport = function (name, content, by)
@@ -219,14 +232,6 @@ function newDB()
   for (let i = 0; i < config.users.length; i++)
     config.users[i].token = 0;
 
-  function findUserByName(name)
-  {
-    let users = config.users;
-    for (let i = 0; i < users.length; i++)
-      if (users[i].name === name) return users[i];
-    return null;
-  }
-
   that.login = function (name, word)
   {
     const user = findUserByName(name);
@@ -235,7 +240,7 @@ function newDB()
     user.token = Math.random();
     user.loginTime = new Date();
     log("here comes the luser " + stringify(user));
-    return user.token;
+    return { token: user.token, planet: user.planet };
   }
 
   function validate(name, token)
@@ -248,10 +253,10 @@ function newDB()
 
   that.postIM = function (message, user, token) 
   { 
-    if (!validate(user, token)) return false; 
+    if (!validate(user, token)) return null; 
     log("postIM passed validation on Sol " + getSol() + ": " + message);
-    that.sols[getSol()].postIM(message, user); 
-    return true;
+    return that.sols[getSol()].postIM(message, user); 
+    //return true;
   }
 
   that.updateReport = function (name, content, user, token) 
@@ -324,8 +329,17 @@ app.post('/ims', (req, res) =>
 {
   log("POSTer child for ims");
   const { message, username, token } = req.body;
-  if (db.postIM(message, username, token))
+  const im = db.postIM(message, username, token);
+  if (im)
+  {
     res.status(200).json( { message: 'IM POSTerized' } );
+    log("distributing " + stringify(im));
+    for (let client of pushClients) 
+    {
+      console.log("push to et");
+      pushEvent(client, im);
+    }
+  }
   else
     res.status(401).json( { message: 'Bad Luser' } );
 });
@@ -378,9 +392,48 @@ app.post('/login', (req, res) =>
       return res.status(400).json({ message: 'Username and password are required' });
   }
 
-  const token = db.login(username, password);
-  if (token)  { return res.status(200).json({ message: 'Login successful', token: token }); }
-  else        { return res.status(401).json({ message: 'Invalid username or password' }); }
+  const userinfo = db.login(username, password);
+  log(userinfo);
+  if (userinfo.token)  { return res.status(200).json({ message: 'Login successful', token: userinfo.token, planet: userinfo.planet }); }
+  else                 { return res.status(401).json({ message: 'Invalid username or password' }); }
+});
+
+let pushClients = new Set();
+function pushEvent(client, obj) 
+{ 
+  const str = 'data: ' + JSON.stringify(obj) + '\n\n';
+  log("pushet to et: " + str);
+  client.write(str); 
+}
+app.get('/events', (req, res) => 
+{
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  pushClients.add(res);
+  log("one more PushClient...now have " + pushClients.size)
+  //const sendEvent = () => {
+  //  const str = `data: ${JSON.stringify({ message: "Hello, World!" })}\n\n`;
+  //  log("sendet to et: " + str);
+  //  res.write(str);
+  //};
+
+  // Send an initial event immediately
+  //sendEvent();
+  pushEvent(res, { message: "Hello Facture!"} );
+
+  // Send subsequent events every 30 seconds
+  //const intervalId = setInterval(sendEvent, 30000);
+
+  // Handle client disconnect
+  req.on('close', () => 
+  {
+    //clearInterval(intervalId);
+    pushClients.delete(res);
+    res.end();
+    log("one less PushClient...now have " + pushClients.size)
+  });
 });
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

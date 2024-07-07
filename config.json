@@ -6,7 +6,7 @@
     "specialReports": [ { "name": "Mid-rotation", "due": 5 }, { "name": "Final", "due": 11 } ],
     "users": 
     [ 
-        { "role": "Directal", "name": "sergii", "word": "yo" }, { "role": "Mission Support",  "name": "ben", "word": "yo" }, 
-        { "role": "Commander", "name": "matts", "word": "yo" }, { "role": "GreenHab Officer", "name": "sean", "word": "yo" } 
+        { "role": "Directal", "name": "sergii", "word": "yo", "planet": "Earth" }, { "role": "Mission Support",  "name": "ben", "word": "yo", "planet": "Earth" }, 
+        { "role": "Commander", "name": "matts", "word": "yo", "planet": "Mars" }, { "role": "GreenHab Officer", "name": "sean", "word": "yo", "planet": "Mars" } 
     ]
 }
