@@ -3,6 +3,7 @@ const express    = require('express');
 const bodyParser = require('body-parser');
 const config     = require('./config.json');
 const cors       = require('cors');
+const { report } = require('process');
 
 const app = express();
 const port = 8081
@@ -115,26 +116,51 @@ function findUserByName(name)
 }
 
 
-function newReport(name)
+function newReport(name, planet, reportToClone)
 {
 	var that = { };
 
   that.type = "Report";
 	that.name = name;
-  that.content = "";
-  that.transmitted = false; // "transmitting" means sending the preport from Mars to Earth (or possibly vice versa).  A report can be on the server but not transmitted.
-  that.xmitTime = new Date();
-
-  that.filled = function () { return that.content.length > 0; }
-  that.received = function () { return that.transmitted && commsDelayPassed(that.xmitTime); }
-  that.update = function (content, by)
+  that.planet = planet;
+  if (reportToClone)
+  { // Reports can be cloned as part of transmission, so the planet field records where it came from 
+    that.content     = reportToClone.content;
+    that.author      = reportToClone.author;
+    that.transmitted = reportToClone.transmitted; // should always be true
+    that.xmitTime    = reportToClone.xmitTime;
+  }
+  else
   {
-    that.content = content;
-    that.author = by;
+    that.content = "";
+    that.author = "Fast Freddie";
+    that.transmitted = false; // "transmitting" means sending the preport from Mars to Earth (or possibly vice versa).  A report can be on the server but not transmitted.
     that.xmitTime = new Date();
   }
+  that.filled = function () { return that.content.length > 0; }
+  that.received = function () { return that.transmitted && commsDelayPassed(that.xmitTime); }
+  that.update = function (content, username)
+  {
+    log("actually updating Report " + that.name + " for " + username + " with " + content);
+    that.content = content;
+    that.author = username;
+    that.transmitted = false; // new version has not been transmitted yet, by definition
+    that.xmitTime = new Date();
+  }
+  that.updateFrom = function (report)
+  { // we do NOT update the name (which should never change) or the planet, as a non-transient Report never leaves its planet 
+    that.content     = report.content;
+    that.author      = report.author;
+    that.transmitted = report.transmitted;
+    that.xmitTime    = report.xmitTime;
+  }
 
-  that.transmit = function () { that.transmitted = true; that.xmitTime = new Date(); }
+  that.transmit = function (username) 
+  { 
+    that.author      = username;
+    that.transmitted = true; 
+    that.xmitTime = new Date(); 
+  }
 
   return that;
 }
@@ -159,27 +185,39 @@ function newSol(solNum)
 {
 	var that = { };
   that.ims = [];
-  that.reports = [];
+  that.reportsEarth = [];
+  that.reportsMars = [];
+//TODO: split reports into reportsEarth and reportsMars and populate both
   const dailyReports = config.dailyReports;
   that.solNum = solNum;
-  for (let i = 0; i < dailyReports.length; i++)
+
+  function createReports(targetArray, planet)
   {
-    const report = newReport(dailyReports[i]);
-    that.reports.push(report);
-  }
-  const specialReports = config.specialReports;
-  for (let i = 0; i < specialReports.length; i++)
-  {
-    if (specialReports[i].due == solNum)
+    for (let i = 0; i < dailyReports.length; i++)
     {
-      const report = newReport(specialReports[i].name);
-      that.reports.push(report);
+      const report = newReport(dailyReports[i], planet);
+      targetArray.push(report);
+    }
+    const specialReports = config.specialReports;
+    for (let i = 0; i < specialReports.length; i++)
+    {
+      if (specialReports[i].due == solNum)
+      {
+        const report = newReport(specialReports[i].name, planet);
+        targetArray.push(report);
+      }
     }
   }
+  createReports(that.reportsEarth, "Earth");
+  createReports(that.reportsMars, "Mars");
 
-  function findReportByName(name)
+  that.findReportByName = function (name, username, otherPlanet)
   {
-    let reports = that.reports;
+    log("finding Report " + name + " for " + username);
+    const user = findUserByName(username);
+    let reports = (user.planet === "Earth") ? that.reportsEarth : that.reportsMars;
+    // if otherPlanet is set, reverse the logic for which planet supplies the report
+    if (otherPlanet) reports = (user.planet === "Earth") ? that.reportsMars : that.reportsEarth;
     for (let i = 0; i < reports.length; i++)
       if (reports[i].name === name) return reports[i];
     return null;
@@ -192,18 +230,21 @@ function newSol(solNum)
     return im;
   }
 
-  that.updateReport = function (name, content, by)
-  {    
-    const report = findReportByName(name);
-    if (report) report.update(content, by);
+  that.updateReport = function (name, content, username)
+  { // update Report contents on the user's planet   
+    const report = that.findReportByName(name, username);
+    log("updating THIS report:");
+    log(report);
+    if (report) report.update(content, username);
     else Log("can't update non-existant report " + name);
   }
 
-  that.transmitReport = function (name)
+  that.transmitReport = function (name, username)
   {
-    const report = findReportByName(name);
-    if (report) report.transmit();
+    const report = that.findReportByName(name, username);
+    if (report) report.transmit(username);
     else Log("can't transmit non-existant report " + name);
+    return report;
   }
 
   return that;
@@ -223,6 +264,7 @@ function newDB()
   }
 
   that.sols = [];
+  that.reportsInTransit = [];
   for (let i = 0; i < config.rotationLength; i++)
   {
     const sol = newSol(i);
@@ -270,14 +312,31 @@ function newDB()
     return true;
   }
 
+  that.reportArrived = function ()
+  {
+    log("Report FINALLY arrived:");
+    const rit = that.reportsInTransit.shift(); // since commsDelay is constant, the next report done is ALWAYS the oldest one in the queue
+    log(rit);
+    const sol = getSol();  // if report is in transit across midnight, this will get the wrong Sol...but is it worth fixing?
+    const report = that.sols[sol].findReportByName(rit.name, rit.author, true); // get report on target (other) planet
+    log("going to update report " + stringify(report));
+    report.updateFrom(rit);
+    log("report now updated to:");
+    log(report);
+    if (report.planet === "Earth") pushToEarth(report);
+    else                           pushToMars(report);
+  }
+
   that.transmitReport = function (name, user, token) 
   { 
     log("transmitReport(" + name + ", " + user + ", " + token + ")");
     if (!validate(user, token)) return false; 
     const sol = getSol();
-    log("updating report on Sol " + sol);
-    that.sols[sol].transmitReport(name); 
-    return true;
+    log("transmitting report on Sol " + sol);
+    const report = that.sols[sol].transmitReport(name, user);
+    that.reportsInTransit.push(newReport(name, report.planet, report));
+    setTimeout(() => that.reportArrived(), config.commsDelay*1000);
+    return report;
   }
 
   that.save = function ()
@@ -334,9 +393,14 @@ app.post('/ims', (req, res) =>
   {
     res.status(200).json( { message: 'IM POSTerized' } );
     log("distributing " + stringify(im));
-    for (let client of pushClients) 
+    for (let client of pushClientsEarth) 
     {
-      console.log("push to et");
+      console.log("push to et Earth");
+      pushEvent(client, im);
+    }
+    for (let client of pushClientsMars) 
+    {
+      console.log("push to et Mars");
       pushEvent(client, im);
     }
   }
@@ -376,9 +440,8 @@ app.post('/reports/transmit/:reportName', (req, res) =>
   log(req.body);
   const { username, token } = req.body;
   const reportName = req.params.reportName;
-
-  if (db.transmitReport(reportName, username, token))
-    //res.setHeader('Access-Control-Allow-Origin', 'http://localhost:8081');
+  const report = db.transmitReport(reportName, username, token);
+  if (report) 
     res.status(200).json({ message:'report transmitted'});
   else
     res.status(401).json({ message:'Bad Luser'});
@@ -398,21 +461,43 @@ app.post('/login', (req, res) =>
   else                 { return res.status(401).json({ message: 'Invalid username or password' }); }
 });
 
-let pushClients = new Set();
+let pushClientsMars  = new Set();
+let pushClientsEarth = new Set();
 function pushEvent(client, obj) 
 { 
   const str = 'data: ' + JSON.stringify(obj) + '\n\n';
   log("pushet to et: " + str);
   client.write(str); 
 }
-app.get('/events', (req, res) => 
+function pushToEarth(obj)
 {
+  log("pushing et to " + pushClientsEarth.size + " Earth clients");
+  for (let client of pushClientsEarth) 
+  {
+    console.log("push to et Earth");
+    pushEvent(client, obj);
+  }
+}
+function pushToMars(obj)
+{
+  log("pushing et to " + pushClientsMars.size + " Mars clients");
+  for (let client of pushClientsMars) 
+  {
+    console.log("push to et Mars");
+    pushEvent(client, obj);
+  }
+}
+
+app.get('/events/:planet', (req, res) => 
+{
+  const planet = req.params.planet;
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
-  pushClients.add(res);
-  log("one more PushClient...now have " + pushClients.size)
+  if (planet === "Earth") pushClientsEarth.add(res);
+  else                    pushClientsMars.add(res);
+  log("one more PushClient...now have " + pushClientsEarth.size + " for Earth, and " + pushClientsMars.size + " for Mars");
   //const sendEvent = () => {
   //  const str = `data: ${JSON.stringify({ message: "Hello, World!" })}\n\n`;
   //  log("sendet to et: " + str);
@@ -430,9 +515,10 @@ app.get('/events', (req, res) =>
   req.on('close', () => 
   {
     //clearInterval(intervalId);
-    pushClients.delete(res);
+    if (planet === "Earth") pushClientsEarth.delete(res);
+    else                    pushClientsMars.delete(res);
+    log("one less PushClient...now have " + pushClientsEarth.size + " for Earth, and " + pushClientsMars.size + " for Mars");
     res.end();
-    log("one less PushClient...now have " + pushClients.size)
   });
 });
 

@@ -1,5 +1,5 @@
 {
-    "rotationLength": 12,
+    "rotationLength": 3,
     "startingSolNum": 0,
     "commsDelay": 10, 
     "dailyReports": [ "GreenHab", "Journalist", "Commander", "Operations", "EVAa", "EVAb" ],
