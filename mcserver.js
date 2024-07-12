@@ -14,7 +14,6 @@ let db = null;
 let verbose = false;
 let cargs = {};
 
-
 global.log = function (str) { console.log(str); }
 global.logv = function (str) { if (verbose) console.log(str); }
 function stringify(obj) { return JSON.stringify(obj, null, 2); }
@@ -32,6 +31,16 @@ function daysBetween(date1, date2)
   const millisecondsPerDay = 1000 * 60 * 60 * 24;
   const daysDifference = Math.floor(timeDifference / millisecondsPerDay);
   return daysDifference;
+}
+
+const now = new Date();
+const refDateStr = now.getFullYear() + "-" + (now.getMonth()+1) + "-" + now.getDate();
+log("refDateStr=" + refDateStr);
+const refDate = new Date(refDateStr);
+function getSolNum(date) 
+{
+  if (!date) date = new Date(); 
+  return Math.floor((date.getTime() - refDate.getTime()) / (1000 * 60 * 60 * 24)); 
 }
 
 function processArgs()
@@ -253,15 +262,11 @@ function newSol(solNum)
 function newDB()
 {
 	var that = { };
-  const now = new Date();
-  that.startDate = new Date(now.getTime() - (config.startingSolNum * 24 * 60 * 60 * 1000));
-  log("startDate is " + that.startDate.toDateString());
 
-  function getSol()
-  {
-    const now = new Date();
-    return daysBetween(that.startDate, now);
-  }
+  that.refDate = refDate;
+  log(getSolNum());
+  //that.startDate = new Date(now.getTime() - (config.startingSolNum * 24 * 60 * 60 * 1000));
+  //log("startDate is " + that.startDate.toDateString());
 
   that.sols = [];
   that.reportsInTransit = [];
@@ -296,8 +301,8 @@ function newDB()
   that.postIM = function (message, user, token) 
   { 
     if (!validate(user, token)) return null; 
-    log("postIM passed validation on Sol " + getSol() + ": " + message);
-    return that.sols[getSol()].postIM(message, user); 
+    log("postIM passed validation on Sol " + getSolNum() + ": " + message);
+    return that.sols[getSolNum()].postIM(message, user); 
     //return true;
   }
 
@@ -306,9 +311,9 @@ function newDB()
     log("updateReport(" + name + ", " + content + ", " + user + ", " + token + ")");
     if (!validate(user, token)) return false; 
     log("updateReport passed validation");
-    const sol = getSol();
-    log("updating report on Sol " + sol);
-    that.sols[sol].updateReport(name, content, user); 
+    const solNum = getSolNum();
+    log("updating report on Sol " + solNum);
+    that.sols[solNum].updateReport(name, content, user); 
     return true;
   }
 
@@ -317,8 +322,8 @@ function newDB()
     log("Report FINALLY arrived:");
     const rit = that.reportsInTransit.shift(); // since commsDelay is constant, the next report done is ALWAYS the oldest one in the queue
     log(rit);
-    const sol = getSol();  // if report is in transit across midnight, this will get the wrong Sol...but is it worth fixing?
-    const report = that.sols[sol].findReportByName(rit.name, rit.author, true); // get report on target (other) planet
+    const solNum = getSolNum();  // if report is in transit across midnight, this will get the wrong Sol...but is it worth fixing?
+    const report = that.sols[solNum].findReportByName(rit.name, rit.author, true); // get report on target (other) planet
     log("going to update report " + stringify(report));
     report.updateFrom(rit);
     log("report now updated to:");
@@ -331,9 +336,9 @@ function newDB()
   { 
     log("transmitReport(" + name + ", " + user + ", " + token + ")");
     if (!validate(user, token)) return false; 
-    const sol = getSol();
-    log("transmitting report on Sol " + sol);
-    const report = that.sols[sol].transmitReport(name, user);
+    const solNum = getSolNum();
+    log("transmitting report on Sol " + solNum);
+    const report = that.sols[solNum].transmitReport(name, user);
     that.reportsInTransit.push(newReport(name, report.planet, report));
     setTimeout(() => that.reportArrived(), config.commsDelay*1000);
     return report;
@@ -349,7 +354,8 @@ function newDB()
     log("Here's what you get, Holmez");
     log(ddb);
     that.sols = ddb.sols;
-    that.startDate = ddb.startDate;
+    that.refDate = ddb.refDate;
+    refDate = that.refDate;
   }
 
   return that;
@@ -366,9 +372,9 @@ app.get('/', (req, res) =>
   res.send('Hello Facture!');
 });
 
-app.get('/start-date', (req, res) => 
+app.get('/ref-date', (req, res) => 
 {
-  res.status(200).json({ startDate: db.startDate });
+  res.status(200).json({ refDate: refDate });
 });
 
 app.get('/comms-delay', (req, res) => 
