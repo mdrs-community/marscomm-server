@@ -246,6 +246,7 @@ function newSol(solNum)
     log(report);
     if (report) report.update(content, username);
     else Log("can't update non-existant report " + name);
+    return report;
   }
 
   that.transmitReport = function (name, username)
@@ -313,7 +314,8 @@ function newDB()
     log("updateReport passed validation");
     const solNum = getSolNum();
     log("updating report on Sol " + solNum);
-    that.sols[solNum].updateReport(name, content, user); 
+    const report = that.sols[solNum].updateReport(name, content, user); 
+    pushToLocal(report);
     return true;
   }
 
@@ -328,8 +330,7 @@ function newDB()
     report.updateFrom(rit);
     log("report now updated to:");
     log(report);
-    if (report.planet === "Earth") pushToEarth(report);
-    else                           pushToMars(report);
+    pushToLocal(report);
   }
 
   that.transmitReport = function (name, user, token) 
@@ -340,6 +341,7 @@ function newDB()
     log("transmitting report on Sol " + solNum);
     const report = that.sols[solNum].transmitReport(name, user);
     that.reportsInTransit.push(newReport(name, report.planet, report));
+    pushToLocal(report);
     setTimeout(() => that.reportArrived(), config.commsDelay*1000);
     return report;
   }
@@ -492,6 +494,11 @@ function pushToMars(obj)
     console.log("push to et Mars");
     pushEvent(client, obj);
   }
+}
+function pushToLocal(obj) // push this object to all clients on whatever planet it's local to
+{
+  if (obj.planet === "Earth") pushToEarth(obj);
+  else                        pushToMars(obj);
 }
 
 app.get('/events/:planet', (req, res) => 
