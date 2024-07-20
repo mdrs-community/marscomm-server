@@ -124,6 +124,18 @@ function findUserByName(name)
   return null;
 }
 
+// for simplicity, attachment content is carried around as base64 string right from the moment it is uploaded, until 
+// the last moment when we need to write binary to the zip file 
+function newAttachment(reportName, filename, content)
+{ // Attachment doesn't have its own planet as it's on its parent Report's planet
+	var that = { };
+
+  that.type = "Attachment";
+  that.reportName = reportName;
+	that.filename = filename;
+  that.content = content;
+  return that;
+}
 
 function newReport(name, planet, reportToClone)
 {
@@ -132,12 +144,15 @@ function newReport(name, planet, reportToClone)
   that.type = "Report";
 	that.name = name;
   that.planet = planet;
+  that.attachments = [];
   if (reportToClone)
   { // Reports can be cloned as part of transmission, so the planet field records where it came from 
     that.content     = reportToClone.content;
     that.author      = reportToClone.author;
     that.transmitted = reportToClone.transmitted; // should always be true
     that.xmitTime    = reportToClone.xmitTime;
+    for (let i = 0; i < reportToClone.attachments.length; i++)
+      that.attachments[i] = reportToClone.attachments[i];
   }
   else
   {
@@ -162,6 +177,13 @@ function newReport(name, planet, reportToClone)
     that.author      = report.author;
     that.transmitted = report.transmitted;
     that.xmitTime    = report.xmitTime;
+  }
+  that.addAttachment = function (filename, content)
+  {
+    log("actually creating the attachment " + filename + " for report " + name);
+    const attachment = newAttachment(name, filename, content);
+    that.attachments.push(attachment);
+    return attachment;
   }
 
   that.transmit = function (username) 
@@ -249,6 +271,27 @@ function newSol(solNum)
     return report;
   }
 
+  that.addAttachment = function (reportName, filename, content, username)
+  {
+    const report = this.findReportByName(reportName, username);
+    return report.addAttachment(filename, content);
+  }
+
+  that.getAttachments = function (planet)
+  {
+    log("GETing attachments for " + planet);
+    const reports = (planet === "Earth") ? that.reportsEarth : that.reportsMars;
+    const allofit = [];
+    for (let i = 0; i < reports.length; i++)
+    {
+      const attachments = reports[i].attachments;
+      for (let j = 0; j < attachments.length; j++)
+        allofit.push(attachments[j]);
+    }
+    log("returning " + allofit.length + " attachments");
+    return allofit;
+  }
+
   that.transmitReport = function (name, username)
   {
     const report = that.findReportByName(name, username);
@@ -317,6 +360,23 @@ function newDB()
     const report = that.sols[solNum].updateReport(name, content, user); 
     pushToLocal(report);
     return true;
+  }
+
+  that.addAttachment = function (reportName, filename, content, username, token)
+  {
+    if (!validate(username, token)) return null; 
+    const solNum = getSolNum();
+    log("report " + reportName + " getting some " + filename + " on Sol " + solNum);
+    const attachment = that.sols[solNum].addAttachment(reportName, filename, content, username); 
+    log(attachment);
+    return attachment;
+  }
+
+  that.getAttachments = function (planet, solNum) 
+  { 
+    log("where the FARUK is my attachment for sol " + solNum + " on " + planet);
+    const sol = that.sols[solNum];
+    return sol.getAttachments(planet); 
   }
 
   that.reportArrived = function ()
@@ -427,6 +487,12 @@ app.get('/reports', (req, res) =>
   res.status(200).json(reports);
 });
 
+app.get('/reports/templates', (req, res) => 
+{
+  log("goGETer them templates");
+  res.status(200).json(config.reportTemplates);
+});
+
 // The client never actually creates reports -- they preexist in an empty state on the server. 
 // The client can update or transmit reports.
 app.post('/reports/update', (req, res) => 
@@ -438,6 +504,30 @@ app.post('/reports/update', (req, res) =>
   if (db.updateReport(reportName, content, username, token))
     //res.setHeader('Access-Control-Allow-Origin', 'http://localhost:8081');
     res.status(200).json({ message:'report POSTiculated'});
+  else
+    res.status(401).json({ message:'Bad Luser'});
+});
+
+app.get('/attachments/:planet/:solNum', (req, res) => 
+{
+  log("don't GET too attachmented");
+  const planet = req.params.planet;
+  const solNum = req.params.solNum;
+  log("getting attachments for " + planet + " for Sol " + solNum);
+  let attachments = db.getAttachments(planet, solNum);
+  log("returning " + attachments.length + " attachments");
+  res.status(200).json(attachments);
+});
+
+//app.post('/reports/add-attachment/:reportName/:filename', (req, res) => 
+app.post('/reports/add-attachment', (req, res) => 
+{
+  //const reportName = req.params.reportName;
+  //const filename = req.params.filename;
+  const { reportName, filename, content, username, token } = req.body;
+  log("got attachment for " + reportName + ": " + filename + " from " + username);
+  if (db.addAttachment(reportName, filename, content, username, token))
+    res.status(200).json({ message:'attachmentized'});
   else
     res.status(401).json({ message:'Bad Luser'});
 });
