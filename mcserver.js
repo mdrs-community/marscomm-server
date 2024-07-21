@@ -4,9 +4,14 @@ const bodyParser = require('body-parser');
 const config     = require('./config.json');
 const cors       = require('cors');
 const { report } = require('process');
+const multer     = require("multer");
+const JSZip      = require('jszip');
 
 const app = express();
-const port = 8081
+const port = 8081;
+const attachDir = '/attachments';
+const multerd = multer({ dest: attachDir });
+
 app.use(bodyParser.json());
 app.use(cors());
 
@@ -177,6 +182,8 @@ function newReport(name, planet, reportToClone)
     that.author      = report.author;
     that.transmitted = report.transmitted;
     that.xmitTime    = report.xmitTime;
+    for (let i = 0; i < report.attachments.length; i++)
+      that.attachments[i] = report.attachments[i];
   }
   that.addAttachment = function (filename, content)
   {
@@ -339,6 +346,7 @@ function newDB()
     const user = findUserByName(name);
     if (!user) return false;
     const recent = user.loginTime && (daysBetween(user.loginTime, new Date()) === 0);
+    log("validating " + name + ", " + token + "; recent=" + recent + ", user=" + JSON.stringify(user));
     return recent && (token === user.token || token === "Boken");  // Boken tokens, like, RULE.  DOOD.
   }
 
@@ -369,8 +377,41 @@ function newDB()
     log("report " + reportName + " getting some " + filename + " on Sol " + solNum);
     const attachment = that.sols[solNum].addAttachment(reportName, filename, content, username); 
     log(attachment);
+    const report = that.findReportByName(reportName, username);
+    pushToLocal(report); // when attachment added, push report locally so other UIs can be updated
     return attachment;
   }
+
+  that.addAttachments = function (reportName, files, username, token)
+  {
+    if (!validate(username, token)) return 0; 
+    const solNum = getSolNum();
+    log("report " + reportName + " getting " + files.length + " filez on Sol " + solNum);
+    files.forEach((file) =>
+    { // attachment "content" is now the filename that multer generates and which is needed later to generate a zip
+      const attachment = that.sols[solNum].addAttachment(reportName, file.originalname, file.filename, username); 
+      log(attachment);
+    });
+    return files.length;
+  }
+
+  that.getAttachmentsZip = function (planet, solNum)
+  {
+    log("where the FARUK is my attachment ZIP for sol " + solNum + " on " + planet);
+    const sol = that.sols[solNum];
+    const attachments = sol.getAttachments(planet); 
+    const zip = new JSZip();
+
+    attachments.forEach( (attachment) =>
+    {
+      log("attempting to read " + attachDir + '/' + attachment.content);
+      const data = fs.readFileSync(attachDir + '/' + attachment.content);
+      zip.file(attachment.filename, data);
+    });
+    return zip;
+  }
+
+  
 
   that.getAttachments = function (planet, solNum) 
   { 
@@ -519,6 +560,26 @@ app.get('/attachments/:planet/:solNum', (req, res) =>
   res.status(200).json(attachments);
 });
 
+app.get('/attachments/zip/:planet/:solNum', async (req, res) => 
+{
+  log("don't GET too zipped about attachments");
+  const planet = req.params.planet;
+  const solNum = req.params.solNum;
+  log("getting attachment zip for " + planet + " for Sol " + solNum);
+  const zip = db.getAttachmentsZip(planet, solNum);
+  const zipContent = await zip.generateAsync({ type: 'nodebuffer' });
+  log("returning zip of attachments");
+    // Set the appropriate headers
+  res.setHeader('Content-Type', 'application/zip');
+  const zipFilename = 'attachments' + solNum + planet + '.zip';
+  res.setHeader('Content-Disposition', 'attachment; filename=' + zipFilename);
+  res.setHeader('Content-Length', zipContent.length);
+
+  // Send the zip file content as the response
+  res.send(zipContent);
+  //res.status(200).download(zip);
+});
+
 //app.post('/reports/add-attachment/:reportName/:filename', (req, res) => 
 app.post('/reports/add-attachment', (req, res) => 
 {
@@ -531,6 +592,26 @@ app.post('/reports/add-attachment', (req, res) =>
   else
     res.status(401).json({ message:'Bad Luser'});
 });
+
+app.post('/attachments', multerd.array('files'), (req, res) => 
+{
+  log("attach THIS, Holmez");
+  if (!req.files) 
+    return res.status(400).send('No files uploaded.');
+
+  let { reportName, username, token } = req.body;
+  token = Number(token);
+  log("multerd in action for " + username + " (" + token + ") on " + reportName);
+  //const filePath = path.join(__dirname, 'uploads', req.file.filename);
+  //console.log(`File saved at: ${filePath}`);
+  log(req.files);
+  if (db.addAttachments(reportName, req.files, username, token))
+    res.status(200).json({ message:'attachmentized'});
+  else
+    res.status(401).json({ message:'Bad Luser'});
+
+});
+
 
 app.post('/reports/transmit/:reportName', (req, res) => 
 {
