@@ -9,7 +9,7 @@ const JSZip      = require('jszip');
 
 const app = express();
 const port = 8081;
-const attachDir = '/attachments';
+const attachDir = 'attachments';
 const multerd = multer({ dest: attachDir });
 
 app.use(bodyParser.json());
@@ -168,13 +168,15 @@ function newReport(name, planet, reportToClone)
   }
   that.filled = function () { return that.content.length > 0; }
   that.received = function () { return that.transmitted && commsDelayPassed(that.xmitTime); }
-  that.update = function (content, username)
+  that.update = function (content, attachments, username)
   {
     log("actually updating Report " + that.name + " for " + username + " with " + content);
     that.content = content;
+    that.attachments = attachments;
     that.author = username;
     that.transmitted = false; // new version has not been transmitted yet, by definition
     that.xmitTime = new Date();
+    log("report finished updating to " + that);
   }
   that.updateFrom = function (report)
   { // we do NOT update the name (which should never change) or the planet, as a non-transient Report never leaves its planet 
@@ -268,12 +270,12 @@ function newSol(solNum)
     return im;
   }
 
-  that.updateReport = function (name, content, username)
+  that.updateReport = function (name, content, attachments, username)
   { // update Report contents on the user's planet   
     const report = that.findReportByName(name, username);
     log("updating THIS report:");
     log(report);
-    if (report) report.update(content, username);
+    if (report) report.update(content, attachments, username);
     else Log("can't update non-existant report " + name);
     return report;
   }
@@ -358,14 +360,14 @@ function newDB()
     //return true;
   }
 
-  that.updateReport = function (name, content, user, token) 
+  that.updateReport = function (name, content, attachments, user, token) 
   { 
     log("updateReport(" + name + ", " + content + ", " + user + ", " + token + ")");
     if (!validate(user, token)) return false; 
     log("updateReport passed validation");
     const solNum = getSolNum();
     log("updating report on Sol " + solNum);
-    const report = that.sols[solNum].updateReport(name, content, user); 
+    const report = that.sols[solNum].updateReport(name, content, attachments, user); 
     pushToLocal(report);
     return true;
   }
@@ -540,9 +542,9 @@ app.post('/reports/update', (req, res) =>
 {
   log("POSTer child for updated reports");
   log(req.body);
-  const { reportName, content, username, token } = req.body;
+  const { reportName, content, attachments, username, token } = req.body;
 
-  if (db.updateReport(reportName, content, username, token))
+  if (db.updateReport(reportName, content, attachments, username, token))
     //res.setHeader('Access-Control-Allow-Origin', 'http://localhost:8081');
     res.status(200).json({ message:'report POSTiculated'});
   else
