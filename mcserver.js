@@ -379,8 +379,6 @@ function newDB()
     log("report " + reportName + " getting some " + filename + " on Sol " + solNum);
     const attachment = that.sols[solNum].addAttachment(reportName, filename, content, username); 
     log(attachment);
-    const report = that.findReportByName(reportName, username);
-    pushToLocal(report); // when attachment added, push report locally so other UIs can be updated
     return attachment;
   }
 
@@ -388,12 +386,16 @@ function newDB()
   {
     if (!validate(username, token)) return 0; 
     const solNum = getSolNum();
+    const sol = that.sols[solNum];
     log("report " + reportName + " getting " + files.length + " filez on Sol " + solNum);
     files.forEach((file) =>
     { // attachment "content" is now the filename that multer generates and which is needed later to generate a zip
-      const attachment = that.sols[solNum].addAttachment(reportName, file.originalname, file.filename, username); 
+      const attachment = sol.addAttachment(reportName, file.originalname, file.filename, username); 
       log(attachment);
     });
+    const report = sol.findReportByName(reportName, username);
+    pushToLocal(report); // when attachment added, push report locally so other UIs can be updated
+
     return files.length;
   }
 
