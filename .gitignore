@@ -1,3 +1,6 @@
 node_modules
 db.json
 old
+attachments
+art
+test.js
