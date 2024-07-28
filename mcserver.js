@@ -142,6 +142,7 @@ function newAttachment(reportName, filename, content)
   return that;
 }
 
+// A Report is created only during server startup, and when a Report is transmitted (using reportToClone)
 function newReport(name, planet, reportToClone)
 {
 	var that = { };
@@ -153,35 +154,45 @@ function newReport(name, planet, reportToClone)
   if (reportToClone)
   { // Reports can be cloned as part of transmission, so the planet field records where it came from 
     that.content     = reportToClone.content;
+    that.approved    = reportToClone.approved;
     that.author      = reportToClone.author;
+    that.authorPlanet= reportToClone.authorPlanet;
     that.transmitted = reportToClone.transmitted; // should always be true
     that.xmitTime    = reportToClone.xmitTime;
     for (let i = 0; i < reportToClone.attachments.length; i++)
       that.attachments[i] = reportToClone.attachments[i];
   }
   else
-  {
+  { // for brand new Reports only 
     that.content = "";
+    that.approved    = false; // if true means approved by Mission Control
     that.author = "Fast Freddie";
+    that.authorPlanet = "Jupiter";
     that.transmitted = false; // "transmitting" means sending the preport from Mars to Earth (or possibly vice versa).  A report can be on the server but not transmitted.
     that.xmitTime = new Date();
   }
   that.filled = function () { return that.content.length > 0; }
   that.received = function () { return that.transmitted && commsDelayPassed(that.xmitTime); }
-  that.update = function (content, attachments, username)
+  that.update = function (content, approved, attachments, username) // called when report is edited or approved
   {
     log("actually updating Report " + that.name + " for " + username + " with " + content);
-    that.content = content;
+    const user = findUserByName(username);
+    const planet = user ? user.planet : "Jupiter";
+    that.content     = content;
+    that.approved    = approved;
     that.attachments = attachments;
-    that.author = username;
+    that.author      = username;
+    that.authorPlanet= planet;
     that.transmitted = false; // new version has not been transmitted yet, by definition
-    that.xmitTime = new Date();
+    that.xmitTime    = new Date();
     log("report finished updating to " + that);
   }
-  that.updateFrom = function (report)
+  that.updateFrom = function (report) // called when a report arrives from a transmit
   { // we do NOT update the name (which should never change) or the planet, as a non-transient Report never leaves its planet 
     that.content     = report.content;
+    that.approved    = report.approved;
     that.author      = report.author;
+    that.authorPlanet= report.authorPlanet;
     that.transmitted = report.transmitted;
     that.xmitTime    = report.xmitTime;
     for (let i = 0; i < report.attachments.length; i++)
@@ -270,12 +281,12 @@ function newSol(solNum)
     return im;
   }
 
-  that.updateReport = function (name, content, attachments, username)
+  that.updateReport = function (name, content, approved, attachments, username)
   { // update Report contents on the user's planet   
     const report = that.findReportByName(name, username);
     log("updating THIS report:");
     log(report);
-    if (report) report.update(content, attachments, username);
+    if (report) report.update(content, approved, attachments, username);
     else Log("can't update non-existant report " + name);
     return report;
   }
@@ -360,14 +371,14 @@ function newDB()
     //return true;
   }
 
-  that.updateReport = function (name, content, attachments, user, token) 
+  that.updateReport = function (name, content, approved, attachments, user, token) 
   { 
     log("updateReport(" + name + ", " + content + ", " + user + ", " + token + ")");
     if (!validate(user, token)) return false; 
     log("updateReport passed validation");
     const solNum = getSolNum();
     log("updating report on Sol " + solNum);
-    const report = that.sols[solNum].updateReport(name, content, attachments, user); 
+    const report = that.sols[solNum].updateReport(name, content, approved, attachments, user); 
     pushToLocal(report);
     return true;
   }
@@ -544,9 +555,9 @@ app.post('/reports/update', (req, res) =>
 {
   log("POSTer child for updated reports");
   log(req.body);
-  const { reportName, content, attachments, username, token } = req.body;
+  const { reportName, content, approved, attachments, username, token } = req.body;
 
-  if (db.updateReport(reportName, content, attachments, username, token))
+  if (db.updateReport(reportName, content, approved, attachments, username, token))
     //res.setHeader('Access-Control-Allow-Origin', 'http://localhost:8081');
     res.status(200).json({ message:'report POSTiculated'});
   else
