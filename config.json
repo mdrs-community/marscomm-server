@@ -1,4 +1,5 @@
 {
+    "port": 8081,
     "rotationLength": 3,
     "startingSolNum": 0,
     "commsDelay": 10, 

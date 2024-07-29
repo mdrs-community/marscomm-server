@@ -8,7 +8,7 @@ const multer     = require("multer");
 const JSZip      = require('jszip');
 
 const app = express();
-const port = 8081;
+//const port = 8081; // port now set in config.json
 const attachDir = 'attachments';
 const multerd = multer({ dest: attachDir });
 
@@ -347,7 +347,7 @@ function newDB()
   {
     const user = findUserByName(name);
     const ok = user && user.word === word;
-    if (!ok) return 0;
+    if (!ok) { log("login attempt for " + name + " failed"); return { }; }
     user.token = Math.random();
     user.loginTime = new Date();
     log("here comes the luser " + stringify(user));
@@ -499,6 +499,12 @@ app.get('/comms-delay', (req, res) =>
 {
   res.status(200).json({ commsDelay: commsDelay() });
 });
+
+app.get('/rotation-length', (req, res) => 
+{
+  res.status(200).json({ rotationLength: config.rotationLength });
+});
+
 
 app.get('/sols/:sol', (req, res) => 
 {
@@ -745,7 +751,7 @@ function main()
 }
 
 main();
-app.listen(port, () => 
+app.listen(config.port, () => 
 {
-  console.log(`MECA listening on port ${port}`);
+  console.log(`MECA listening on port ${config.port}`);
 });
