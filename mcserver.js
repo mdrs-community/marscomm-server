@@ -1,3 +1,8 @@
+/* TODO
+copyright & license
+test DB save & load and general server restart
+*/
+
 const fs         = require('fs');
 const express    = require('express');
 const bodyParser = require('body-parser');
@@ -350,7 +355,7 @@ function newDB()
     if (!ok) { log("login attempt for " + name + " failed"); return { }; }
     user.token = Math.random();
     user.loginTime = new Date();
-    log("here comes the luser " + stringify(user));
+    log("user login for " + stringify(user));
     return { token: user.token, planet: user.planet };
   }
 
@@ -360,7 +365,7 @@ function newDB()
     if (!user) return false;
     const recent = user.loginTime && (daysBetween(user.loginTime, new Date()) === 0);
     log("validating " + name + ", " + token + "; recent=" + recent + ", user=" + JSON.stringify(user));
-    return recent && (token === user.token || token === "Boken");  // Boken tokens, like, RULE.  DOOD.
+    return recent && (token === user.token);
   }
 
   that.postIM = function (message, user, token) 
@@ -368,7 +373,6 @@ function newDB()
     if (!validate(user, token)) return null; 
     log("postIM passed validation on Sol " + getSolNum() + ": " + message);
     return that.sols[getSolNum()].postIM(message, user); 
-    //return true;
   }
 
   that.updateReport = function (name, content, approved, attachments, user, token) 
@@ -398,7 +402,7 @@ function newDB()
     if (!validate(username, token)) return 0; 
     const solNum = getSolNum();
     const sol = that.sols[solNum];
-    log("report " + reportName + " getting " + files.length + " filez on Sol " + solNum);
+    log("report " + reportName + " getting " + files.length + " files on Sol " + solNum);
     files.forEach((file) =>
     { // attachment "content" is now the filename that multer generates and which is needed later to generate a zip
       const attachment = sol.addAttachment(reportName, file.originalname, file.filename, username); 
@@ -412,7 +416,7 @@ function newDB()
 
   that.getAttachmentsZip = function (planet, solNum)
   {
-    log("where the FARUK is my attachment ZIP for sol " + solNum + " on " + planet);
+    log("where is my attachment ZIP for sol " + solNum + " on " + planet);
     const sol = that.sols[solNum];
     const attachments = sol.getAttachments(planet); 
     const zip = new JSZip();
@@ -430,7 +434,7 @@ function newDB()
 
   that.getAttachments = function (planet, solNum) 
   { 
-    log("where the FARUK is my attachment for sol " + solNum + " on " + planet);
+    log("where is my attachment for sol " + solNum + " on " + planet);
     const sol = that.sols[solNum];
     return sol.getAttachments(planet); 
   }
@@ -469,7 +473,7 @@ function newDB()
   that.load = function ()
   {
     let ddb = JSON.parse(fs.readFileSync('db.json'));
-    log("Here's what you get, Holmez");
+    log("Here's what you get:");
     log(ddb);
     that.sols = ddb.sols;
     that.refDate = ddb.refDate;
@@ -487,7 +491,7 @@ function newDB()
 
 app.get('/', (req, res) => 
 {
-  res.send('Hello Facture!');
+  res.send('Hello MarsComm!');
 });
 
 app.get('/ref-date', (req, res) => 
@@ -504,7 +508,6 @@ app.get('/rotation-length', (req, res) =>
 {
   res.status(200).json({ rotationLength: config.rotationLength });
 });
-
 
 app.get('/sols/:sol', (req, res) => 
 {
@@ -535,12 +538,12 @@ app.post('/ims', (req, res) =>
     }
   }
   else
-    res.status(401).json( { message: 'Bad Luser' } );
+    res.status(401).json( { message: 'Bad user' } );
 });
 
 app.get('/reports', (req, res) => 
 {
-  log("goGETer them reports");
+  log("GET the reports");
   let reports = [];
   for (let i = 0; i < config.dailyReports.length; i++)
     reports.push(config.dailyReports[i]);
@@ -551,7 +554,7 @@ app.get('/reports', (req, res) =>
 
 app.get('/reports/templates', (req, res) => 
 {
-  log("goGETer them templates");
+  log("GET the templates");
   res.status(200).json(config.reportTemplates);
 });
 
@@ -567,7 +570,7 @@ app.post('/reports/update', (req, res) =>
     //res.setHeader('Access-Control-Allow-Origin', 'http://localhost:8081');
     res.status(200).json({ message:'report POSTiculated'});
   else
-    res.status(401).json({ message:'Bad Luser'});
+    res.status(401).json({ message:'Bad user'});
 });
 
 app.get('/attachments/:planet/:solNum', (req, res) => 
@@ -583,7 +586,7 @@ app.get('/attachments/:planet/:solNum', (req, res) =>
 
 app.get('/attachments/zip/:planet/:solNum', async (req, res) => 
 {
-  log("don't GET too zipped about attachments");
+  log("GET zipped attachments");
   const planet = req.params.planet;
   const solNum = req.params.solNum;
   log("getting attachment zip for " + planet + " for Sol " + solNum);
@@ -601,35 +604,32 @@ app.get('/attachments/zip/:planet/:solNum', async (req, res) =>
   //res.status(200).download(zip);
 });
 
-//app.post('/reports/add-attachment/:reportName/:filename', (req, res) => 
 app.post('/reports/add-attachment', (req, res) => 
 {
-  //const reportName = req.params.reportName;
-  //const filename = req.params.filename;
   const { reportName, filename, content, username, token } = req.body;
   log("got attachment for " + reportName + ": " + filename + " from " + username);
   if (db.addAttachment(reportName, filename, content, username, token))
     res.status(200).json({ message:'attachmentized'});
   else
-    res.status(401).json({ message:'Bad Luser'});
+    res.status(401).json({ message:'Bad user'});
 });
 
 app.post('/attachments', multerd.array('files'), (req, res) => 
 {
-  log("attach THIS, Holmez");
+  log("attach this");
   if (!req.files) 
     return res.status(400).send('No files uploaded.');
 
   let { reportName, username, token } = req.body;
   token = Number(token);
-  log("multerd in action for " + username + " (" + token + ") on " + reportName);
+  log("multer in action for " + username + " (" + token + ") on " + reportName);
   //const filePath = path.join(__dirname, 'uploads', req.file.filename);
   //console.log(`File saved at: ${filePath}`);
   log(req.files);
   if (db.addAttachments(reportName, req.files, username, token))
     res.status(200).json({ message:'attachmentized'});
   else
-    res.status(401).json({ message:'Bad Luser'});
+    res.status(401).json({ message:'Bad user'});
 
 });
 
@@ -644,7 +644,7 @@ app.post('/reports/transmit/:reportName', (req, res) =>
   if (report) 
     res.status(200).json({ message:'report transmitted'});
   else
-    res.status(401).json({ message:'Bad Luser'});
+    res.status(401).json({ message:'Bad user'});
 });
 
 app.post('/login', (req, res) => 
@@ -703,22 +703,14 @@ app.get('/events/:planet', (req, res) =>
   if (planet === "Earth") pushClientsEarth.add(res);
   else                    pushClientsMars.add(res);
   log("one more PushClient...now have " + pushClientsEarth.size + " for Earth, and " + pushClientsMars.size + " for Mars");
-  //const sendEvent = () => {
-  //  const str = `data: ${JSON.stringify({ message: "Hello, World!" })}\n\n`;
-  //  log("sendet to et: " + str);
-  //  res.write(str);
-  //};
 
-  // Send an initial event immediately
-  //sendEvent();
-  pushEvent(res, { message: "Hello Facture!"} );
+  pushEvent(res, { message: "Hello Facture!"} ); // Send an initial event immediately
 
-  // Send subsequent events every 30 seconds
-  //const intervalId = setInterval(sendEvent, 30000);
+  //const intervalId = setInterval(sendEvent, 30000);   // Send subsequent events every 30 seconds
 
-  // Handle client disconnect
+  
   req.on('close', () => 
-  {
+  { // Handle client disconnect
     //clearInterval(intervalId);
     if (planet === "Earth") pushClientsEarth.delete(res);
     else                    pushClientsMars.delete(res);
@@ -728,30 +720,23 @@ app.get('/events/:planet', (req, res) =>
 });
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// main
 
 function main()
 {
-  log("MarsComm open for bidness\n" +
-      "=========================");
+  log("MarsComm is online\n" +
+      "==================");
   log(config);
   processArgs();
   db = newDB();
   log(db);
   if (cargs.loadDB) db.load();
 
-/*
-  db.updateReport("Journalist", "badass journalist content");
-  db.save();
-  db.sols = [];
-  db.load();
-*/
-  log(db);
-  log(db.sols[0]);
+  //log(db);
+  //log(db.sols[0]);
 }
 
 main();
 app.listen(config.port, () => 
 {
-  console.log(`MECA listening on port ${config.port}`);
+  console.log(`MarsComm listening on port ${config.port}`);
 });
