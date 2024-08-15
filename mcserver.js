@@ -1,7 +1,11 @@
 /* TODO
 copyright & license
 test DB save & load and general server restart
+put external client dependencies into the repo
+install qooxdoo in the repo 
 */
+
+/* Copyright © 2024 by Matthew F. Storch. Usage is subject to the license included in the MarsComm server repo. */
 
 const fs         = require('fs');
 const express    = require('express');
@@ -11,6 +15,7 @@ const cors       = require('cors');
 const { report } = require('process');
 const multer     = require("multer");
 const JSZip      = require('jszip');
+const { log }    = require('console');
 
 const app = express();
 //const port = 8081; // port now set in config.json
@@ -504,10 +509,16 @@ app.get('/comms-delay', (req, res) =>
   res.status(200).json({ commsDelay: commsDelay() });
 });
 
+app.get('/crew-num', (req, res) => 
+{
+  res.status(200).json({ crewNum: config.crewNum });
+});
+
 app.get('/rotation-length', (req, res) => 
 {
   res.status(200).json({ rotationLength: config.rotationLength });
 });
+
 
 app.get('/sols/:sol', (req, res) => 
 {
@@ -666,7 +677,7 @@ let pushClientsEarth = new Set();
 function pushEvent(client, obj) 
 { 
   const str = 'data: ' + JSON.stringify(obj) + '\n\n';
-  log("pushet to et: " + str);
+  log("getting pushy: " + str);
   client.write(str); 
 }
 function pushToEarth(obj)
@@ -725,12 +736,12 @@ function main()
 {
   log("MarsComm is online\n" +
       "==================");
+  log("Config:");
   log(config);
   processArgs();
   db = newDB();
-  log(db);
+  //log(db);
   if (cargs.loadDB) db.load();
-
   //log(db);
   //log(db.sols[0]);
 }
