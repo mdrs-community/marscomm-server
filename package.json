@@ -1,4 +1,7 @@
 {
+  "name": "marscomm-server",
+  "version": "0.1.0",
+  "license": "MIT",
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.19.2",
