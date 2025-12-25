@@ -514,9 +514,14 @@ app.get('/crew-num', (req, res) =>
   res.status(200).json({ crewNum: config.crewNum });
 });
 
-app.get('/rotation-length', (req, res) => 
+app.get('/rotation-length', (req, res) =>
 {
   res.status(200).json({ rotationLength: config.rotationLength });
+});
+
+app.get('/organization', (req, res) =>
+{
+  res.status(200).json({ organization: config.organization });
 });
 
 

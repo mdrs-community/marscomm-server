@@ -1,4 +1,5 @@
 {
+    "organization": "LunAres",
     "port": 8081,
     "crewNum": 297,
     "rotationLength": 6,
