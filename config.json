@@ -1,8 +1,8 @@
 {
     "organization": "LunAres",
     "port": 8081,
-    "crewNum": 297,
-    "rotationLength": 6,
+    "crewNum": 53,
+    "rotationLength": 14,
     "startingSolNum": 0,
     "commsDelay": 10, 
     "dailyReports": [ "GreenHab", "Journalist", "Commander", "Operations", "EVAa", "EVAb" ],

@@ -24,6 +24,7 @@ const multerd = multer({ dest: attachDir });
 
 app.use(bodyParser.json());
 app.use(cors());
+app.use((req, res, next) => { resetIdleTimer(); next(); });
 
 let db = null;
 let verbose = false;
@@ -37,6 +38,20 @@ function isArray (value) { return value && typeof value === 'object' && value.co
 function assert(condition, str) { if (!condition) { log("ERROR: " + str); throw condition; } }
 
 function sleep(ms) { return new Promise((resolve) => { setTimeout(resolve, ms); }); }
+
+function formatTimestamp(date)
+{
+  const pad = n => n.toString().padStart(2, '0');
+  return date.getFullYear().toString() + pad(date.getMonth()+1) + pad(date.getDate()) +
+         '_' + pad(date.getHours()) + pad(date.getMinutes()) + pad(date.getSeconds());
+}
+
+let idleTimer = null;
+function resetIdleTimer()
+{
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(function() { if (db) { log("idle timeout - saving DB"); db.save(); } }, 60 * 1000);
+}
 
 function daysBetween(date1, date2) 
 {
@@ -69,12 +84,13 @@ function processArgs()
 
 	if (cargs.help)
 	{
-		log("usage: node mcserver [loadDB]");
+		log("usage: node mcserver [verbose] [reset]");
+		log("  reset  -- rename db.json to db.json.<timestamp> and start with empty DB");
 		return false;
 	}
 
 	cargs.verbose 	= verbose = argParser.findArg("verbose");
-	cargs.loadDB    = argParser.findArg("loadDB"); // load DB on startup
+	cargs.reset     = argParser.findArg("reset"); // discard DB and start fresh
 	return true;
 }
 
@@ -333,6 +349,28 @@ function newSol(solNum)
   return that;
 }
 
+function rehydrateReport(r)
+{
+  const fresh = newReport(r.name, r.planet);
+  fresh.content      = r.content;
+  fresh.approved     = r.approved;
+  fresh.author       = r.author;
+  fresh.authorPlanet = r.authorPlanet;
+  fresh.transmitted  = r.transmitted;
+  fresh.xmitTime     = new Date(r.xmitTime);
+  fresh.attachments  = r.attachments || [];
+  return fresh;
+}
+
+function rehydrateSol(s)
+{
+  const fresh = newSol(s.solNum);
+  fresh.ims          = s.ims.map(im => { im.xmitTime = new Date(im.xmitTime); return im; });
+  fresh.reportsEarth = s.reportsEarth.map(rehydrateReport);
+  fresh.reportsMars  = s.reportsMars.map(rehydrateReport);
+  return fresh;
+}
+
 function newDB()
 {
 	var that = { };
@@ -477,12 +515,13 @@ function newDB()
   }
   that.load = function ()
   {
+    if (!fs.existsSync('db.json')) { log("no db.json found, starting with empty DB"); return; }
     let ddb = JSON.parse(fs.readFileSync('db.json'));
-    log("Here's what you get:");
-    log(ddb);
-    that.sols = ddb.sols;
-    that.refDate = ddb.refDate;
-    refDate = that.refDate;
+    log("loading DB from db.json (" + ddb.sols.length + " sols)");
+    that.sols    = ddb.sols.map(rehydrateSol);
+    that.refDate = new Date(ddb.refDate);
+    refDate      = that.refDate;
+    log("DB loaded successfully");
   }
 
   return that;
@@ -745,10 +784,17 @@ function main()
   log(config);
   processArgs();
   db = newDB();
-  //log(db);
-  if (cargs.loadDB) db.load();
-  //log(db);
-  //log(db.sols[0]);
+  if (cargs.reset)
+  {
+    if (fs.existsSync('db.json'))
+    {
+      const backup = 'db.json.' + formatTimestamp(new Date());
+      fs.renameSync('db.json', backup);
+      log("reset: renamed db.json to " + backup);
+    }
+    else log("reset: no db.json to rename, starting fresh");
+  }
+  else db.load();
 }
 
 main();
