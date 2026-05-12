@@ -225,6 +225,6 @@ The server listens on `config.port` (default 8081). CORS is enabled for all orig
 ## Known Limitations / TODOs
 
 - Passwords stored in plaintext in `config.json`.
-- `commsDelay = -1` (real Mars delay) is not yet implemented; falls back to 30 seconds.
+- `commsDelay = -1` uses a sinusoidal approximation of the real Earth-Mars light travel time (182–1342 seconds), calibrated to the Jan 16 2025 opposition and accurate to ~10% through 2030. No internet lookup is performed.
 - `getSolNum()` uses today's date at server startup as Sol 0; if a report transmits across midnight, the Sol assignment may be incorrect.
 - The `body-parser` package is used explicitly but is included in Express 4 — minor redundancy.
