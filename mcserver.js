@@ -7,15 +7,16 @@ install qooxdoo in the repo
 
 /* Copyright © 2024 by Matthew F. Storch. Usage is subject to the license included in the MarsComm server repo. */
 
-const fs         = require('fs');
-const express    = require('express');
-const bodyParser = require('body-parser');
-const config     = require('./config.json');
-const cors       = require('cors');
-const { report } = require('process');
-const multer     = require("multer");
-const JSZip      = require('jszip');
-const { log }    = require('console');
+const fs                   = require('fs');
+const express              = require('express');
+const bodyParser           = require('body-parser');
+const config               = require('./config.json');
+const cors                 = require('cors');
+const { report }           = require('process');
+const multer               = require("multer");
+const JSZip                = require('jszip');
+const { log }              = require('console');
+const { execSync }         = require('child_process');
 
 const app = express();
 //const port = 8081; // port now set in config.json
@@ -46,6 +47,21 @@ function formatTimestamp(date)
          '_' + pad(date.getHours()) + pad(date.getMinutes()) + pad(date.getSeconds());
 }
 
+function getGitInfo(repoPath)
+{
+  try
+  {
+    const opts = { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] };
+    const tag  = execSync('git -C "' + repoPath + '" describe --tags --abbrev=0', opts).trim();
+    const hash = execSync('git -C "' + repoPath + '" rev-parse --short HEAD',      opts).trim();
+    const date = execSync('git -C "' + repoPath + '" log -1 --format=%cs',         opts).trim();
+    return { tag, hash, date };
+  }
+  catch (e) { return { tag: '?', hash: '?', date: '?' }; }
+}
+
+let versionInfo = { server: { tag:'?', hash:'?', date:'?' }, client: { tag:'?', hash:'?', date:'?' } };
+
 let idleTimer = null;
 function resetIdleTimer()
 {
@@ -66,11 +82,12 @@ function daysBetween(date1, date2)
 const now = new Date();
 const refDateStr = now.getFullYear() + "-" + (now.getMonth()+1) + "-" + now.getDate();
 log("refDateStr=" + refDateStr);
-const refDate = new Date(refDateStr);
-function getSolNum(date) 
+let refDate = new Date(refDateStr);
+function getSolNum(date)
 {
-  if (!date) date = new Date(); 
-  return Math.floor((date.getTime() - refDate.getTime()) / (1000 * 60 * 60 * 24)); 
+  if (!date) date = new Date();
+  const sol = Math.floor((date.getTime() - refDate.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.max(0, Math.min(sol, config.rotationLength - 1));
 }
 
 function processArgs()
@@ -84,13 +101,13 @@ function processArgs()
 
 	if (cargs.help)
 	{
-		log("usage: node mcserver [verbose] [reset]");
-		log("  reset  -- rename db.json to db.json.<timestamp> and start with empty DB");
+		log("usage: node mcserver [verbose] [reset|--reset|--restart]");
+		log("  reset/--reset/--restart  -- archive db.json with timestamp and start from Sol 0");
 		return false;
 	}
 
 	cargs.verbose 	= verbose = argParser.findArg("verbose");
-	cargs.reset     = argParser.findArg("reset"); // discard DB and start fresh
+	cargs.reset     = argParser.findArg("reset") || argParser.findArg("--reset") || argParser.findArg("--restart");
 	return true;
 }
 
@@ -383,9 +400,9 @@ function rehydrateReport(r)
 function rehydrateSol(s)
 {
   const fresh = newSol(s.solNum);
-  fresh.ims          = s.ims.map(im => { im.xmitTime = new Date(im.xmitTime); return im; });
-  fresh.reportsEarth = s.reportsEarth.map(rehydrateReport);
-  fresh.reportsMars  = s.reportsMars.map(rehydrateReport);
+  fresh.ims          = (s.ims          || []).map(im => { im.xmitTime = new Date(im.xmitTime); return im; });
+  fresh.reportsEarth = (s.reportsEarth || []).map(rehydrateReport);
+  fresh.reportsMars  = (s.reportsMars  || []).map(rehydrateReport);
   return fresh;
 }
 
@@ -536,10 +553,18 @@ function newDB()
     if (!fs.existsSync('db.json')) { log("no db.json found, starting with empty DB"); return; }
     let ddb = JSON.parse(fs.readFileSync('db.json'));
     log("loading DB from db.json (" + ddb.sols.length + " sols)");
-    that.sols    = ddb.sols.map(rehydrateSol);
-    that.refDate = new Date(ddb.refDate);
-    refDate      = that.refDate;
-    log("DB loaded successfully");
+    that.sols = ddb.sols.map(rehydrateSol);
+    const loadedDate = new Date(ddb.refDate);
+    if (!isNaN(loadedDate.getTime()))
+    {
+      that.refDate = loadedDate;
+      refDate      = loadedDate;
+    }
+    else log("WARNING: refDate missing or invalid in db.json, keeping today as Sol 0");
+    // if rotationLength increased since the DB was saved, add fresh sols for the new indices
+    while (that.sols.length < config.rotationLength)
+      that.sols.push(newSol(that.sols.length));
+    log("DB loaded successfully (" + that.sols.length + " sols)");
   }
 
   return that;
@@ -579,6 +604,11 @@ app.get('/rotation-length', (req, res) =>
 app.get('/organization', (req, res) =>
 {
   res.status(200).json({ organization: config.organization });
+});
+
+app.get('/version', (req, res) =>
+{
+  res.status(200).json(versionInfo);
 });
 
 
@@ -801,6 +831,11 @@ function main()
   log("Config:");
   log(config);
   processArgs();
+  versionInfo.server = getGitInfo('.');
+  versionInfo.client = getGitInfo(config.clientPath || '../misc/qooxdoo');
+  log("server: " + versionInfo.server.tag + " (" + versionInfo.server.hash + ") " + versionInfo.server.date);
+  log("client: " + versionInfo.client.tag + " (" + versionInfo.client.hash + ") " + versionInfo.client.date);
+  log("Actual Mars comms delay right now: " + marsCommsDelay() + " seconds (" + (marsCommsDelay()/60).toFixed(1) + " min one-way)");
   db = newDB();
   if (cargs.reset)
   {
@@ -813,6 +848,12 @@ function main()
     else log("reset: no db.json to rename, starting fresh");
   }
   else db.load();
+
+  log("--------------------------------------------------");
+  log("refDate:    " + refDate.toDateString());
+  log("Sol:        " + getSolNum() + " of " + (config.rotationLength - 1));
+  log("commsDelay: " + commsDelay() + " sec" + (config.commsDelay == -1 ? " (real Mars)" : " (config)"));
+  log("--------------------------------------------------");
 }
 
 main();
