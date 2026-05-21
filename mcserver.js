@@ -179,7 +179,7 @@ function commsDelay()   // commsDelay is the 1-way delay in seconds; -1 means us
 function commsDelayPassed(sentTime)
 {
   const now = new Date();
-  return (now - sentTime) * 1000 >= commsDelay();
+  return (now - sentTime) / 1000 >= commsDelay();
 }
 
 function findUserByName(name)
@@ -284,7 +284,9 @@ function newIM(content, username)
   that.type = "IM";
   that.content = content;
   that.user = username;
-  that.planet = findUserByName(username).planet;
+  const imUser = findUserByName(username);
+  if (!imUser) throw new Error('Unknown user: ' + username);
+  that.planet = imUser.planet;
   that.xmitTime = new Date();
   that.transmitted = true;
 
@@ -441,7 +443,7 @@ function newDB()
   {
     const user = findUserByName(name);
     if (!user) return false;
-    const recent = user.loginTime && (daysBetween(user.loginTime, new Date()) === 0);
+    const recent = user.loginTime && ((new Date() - user.loginTime) < 24 * 3600 * 1000);
     log("validating " + name + ", " + token + "; recent=" + recent + ", user=" + JSON.stringify(user));
     return recent && (token === user.token);
   }
@@ -546,7 +548,8 @@ function newDB()
 
   that.save = function ()
   {
-    fs.writeFileSync('db.json', JSON.stringify(that));
+    fs.writeFileSync('db.json.tmp', JSON.stringify(that));
+    fs.renameSync('db.json.tmp', 'db.json');
   }
   that.load = function ()
   {
@@ -620,21 +623,23 @@ app.get('/sols/:sol', (req, res) =>
   res.status(200).json(db.sols[sol]);
 });
 
-app.post('/ims', (req, res) => 
+app.post('/ims', (req, res) =>
 {
   log("POSTer child for ims");
   const { message, username, token } = req.body;
-  const im = db.postIM(message, username, token);
+  let im;
+  try { im = db.postIM(message, username, token); }
+  catch (e) { log("postIM error: " + e.message); return res.status(400).json({ message: e.message }); }
   if (im)
   {
     res.status(200).json( { message: 'IM POSTerized' } );
     log("distributing " + stringify(im));
-    for (let client of pushClientsEarth) 
+    for (let client of pushClientsEarth)
     {
       console.log("push to et Earth");
       pushEvent(client, im);
     }
-    for (let client of pushClientsMars) 
+    for (let client of pushClientsMars)
     {
       console.log("push to et Mars");
       pushEvent(client, im);
@@ -766,11 +771,17 @@ app.post('/login', (req, res) =>
 
 let pushClientsMars  = new Set();
 let pushClientsEarth = new Set();
-function pushEvent(client, obj) 
-{ 
+function pushEvent(client, obj)
+{
   const str = 'data: ' + JSON.stringify(obj) + '\n\n';
   log("getting pushy: " + str);
-  client.write(str); 
+  try { client.write(str); }
+  catch (e)
+  {
+    log("pushEvent error - removing dead client: " + e.message);
+    pushClientsEarth.delete(client);
+    pushClientsMars.delete(client);
+  }
 }
 function pushToEarth(obj)
 {
@@ -857,7 +868,32 @@ function main()
 }
 
 main();
-app.listen(config.port, () => 
+
+function saveAndExit(reason)
+{
+  log(reason + " - saving DB and exiting");
+  if (db) { try { db.save(); } catch (e) { log("DB save failed: " + e.message); } }
+  process.exit(0);
+}
+
+process.on('SIGINT',  () => saveAndExit('SIGINT'));
+process.on('SIGTERM', () => saveAndExit('SIGTERM'));
+
+process.on('uncaughtException', (err) =>
+{
+  log("UNCAUGHT EXCEPTION: " + err.message + "\n" + err.stack);
+  if (db) { try { db.save(); } catch (e) { log("DB save failed: " + e.message); } }
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) =>
+{
+  log("UNHANDLED REJECTION: " + reason);
+  if (db) { try { db.save(); } catch (e) { log("DB save failed: " + e.message); } }
+  process.exit(1);
+});
+
+app.listen(config.port, () =>
 {
   console.log(`MarsComm listening on port ${config.port}`);
 });

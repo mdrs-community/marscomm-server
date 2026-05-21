@@ -8,7 +8,7 @@ See also: `AppSpec.md` in the client repo (`a:/prog/misc/qooxdoo`) for the overa
 
 The MarsComm server is a Node.js/Express application that provides the backend for the MarsComm communications simulation system. It maintains an in-memory database of mission Sols, instant messages, and reports, and pushes real-time updates to connected clients via Server-Sent Events (SSE).
 
-State is automatically persisted to `db.json` after 1 minute of server idle time (no client requests). On startup the DB is loaded from `db.json` by default if it exists.
+State is automatically persisted to `db.json` after 1 minute of server idle time (no client requests), and immediately on clean shutdown (SIGINT/SIGTERM). Writes are atomic (write to `db.json.tmp`, then rename). On startup the DB is loaded from `db.json` by default if it exists. Uncaught exceptions and unhandled promise rejections trigger an emergency save before exiting.
 
 ---
 
@@ -19,7 +19,7 @@ State is automatically persisted to `db.json` after 1 minute of server idle time
 - **File upload**: multer
 - **ZIP generation**: JSZip
 - **Configuration**: `config.json` (loaded at startup, not reloaded at runtime)
-- **Persistence**: In-memory with automatic save to `db.json` after 1 minute of idle; loaded automatically on startup
+- **Persistence**: In-memory with automatic save to `db.json` after 1 minute of idle or on shutdown; atomic write (tmp+rename); loaded automatically on startup
 
 ---
 
@@ -180,7 +180,7 @@ Tokens are random floats assigned at login. Tokens expire daily (validated by ch
 - Passwords are stored in plaintext in `config.json` as `word` field (suitable for simulation/demo use only).
 - On login, a random float token is assigned to the user in memory.
 - All mutating endpoints (`/ims`, `/reports/update`, `/reports/transmit`, `/attachments`) validate `username` + `token` and reject with `401` if invalid.
-- Tokens are validated as "same-day" (loginTime must be today).
+- Tokens are validated as "within 24 hours of login time".
 
 ---
 
