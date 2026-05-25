@@ -48,6 +48,8 @@ attachments/         -- uploaded attachment files (stored by multer-generated fi
 | `dailyReports` | string[] | Report names present every Sol |
 | `specialReports` | `{name, due}[]` | Report names present only on specific Sol numbers |
 | `users` | `{role, name, word, planet}[]` | User accounts; `word` is the password; `planet` is `"Earth"` or `"Mars"` |
+| `groups` | `{name, roles[]}[]` | Optional custom distribution groups beyond the built-in All/Mission Control/Crew. Each `roles` entry must exactly match a `role` string in `users`. |
+| `distributionCooldown` | number | Seconds the client waits after a distribution change before refreshing the chat view. Default 2. |
 | `reportTemplates` | `{name: htmlString}` | HTML templates for each report type; support placeholders `{crewNum}`, `{date}`, `{solNum}` |
 
 ---
@@ -58,11 +60,24 @@ attachments/         -- uploaded attachment files (stored by multer-generated fi
 
 Created at startup for each Sol index 0..rotationLength-1. Contains:
 - `solNum`: integer index
-- `ims[]`: array of IM objects
+- `chats[]`: array of Chat objects (replaces the former flat `ims[]`)
 - `reportsEarth[]`: report objects for Earth users
 - `reportsMars[]`: report objects for Mars users
 
 Both `reportsEarth` and `reportsMars` are populated with the same report names (daily + applicable special reports), but track content/state independently per planet.
+
+**DB migration:** if a loaded `db.json` has Sols with an `ims[]` field and no `chats[]`, rehydration wraps those IMs into a single Chat whose `users` list is all usernames in `config.users`, preserving history.
+
+### Chat
+
+```
+{
+  users: string[],   // sorted list of usernames in this chat (always includes sender)
+  ims: IM[]
+}
+```
+
+A Chat is identified by its `users` set. When a new IM is POSTed, the server searches the current Sol's `chats[]` for one whose `users` array matches the target set (including the sender); if found the IM is appended, otherwise a new Chat is created. The sender is always added to the user set server-side even if omitted by the client.
 
 ### Report
 
@@ -100,7 +115,7 @@ Both `reportsEarth` and `reportsMars` are populated with the same report names (
 }
 ```
 
-IMs are stored per-Sol. The server broadcasts every IM to ALL connected clients (both planets). The client is responsible for holding IMs that haven't yet "arrived" based on comms delay.
+IMs are stored inside a Chat. The server broadcasts every new IM to ALL connected clients on both planets, including the Chat's `users[]` array in the pushed payload so the client can filter by current distribution. The client is responsible for holding IMs that haven't yet "arrived" based on comms delay.
 
 ### Attachment
 
@@ -140,17 +155,25 @@ Attachment binary data is stored by multer in the `attachments/` directory using
 
 Tokens are random floats assigned at login. Tokens expire daily (validated by checking `loginTime` is today).
 
+### Users
+
+| Method | Path | Response |
+|---|---|---|
+| `GET` | `/users` | `[{role, name, planet}]` — all users, no passwords |
+
 ### Sol Data
 
 | Method | Path | Response |
 |---|---|---|
-| `GET` | `/sols/:sol` | Full Sol object including `ims`, `reportsEarth`, `reportsMars` |
+| `GET` | `/sols/:sol` | Full Sol object including `chats`, `reportsEarth`, `reportsMars` |
 
 ### Instant Messages
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| `POST` | `/ims` | `{ message, username, token }` | `200` + pushes IM to all SSE clients |
+| `POST` | `/ims` | `{ message, username, token, users[] }` | `200` + pushes IM (with `users[]`) to all SSE clients |
+
+`users[]` is the list of target usernames selected by the sender. The server always adds `username` to the set if not already present. The matching Chat is found by sorted `users[]` comparison, or created if none exists.
 
 ### Reports
 
@@ -188,7 +211,7 @@ Tokens are random floats assigned at login. Tokens expire daily (validated by ch
 
 Two sets of SSE clients are maintained: `pushClientsEarth` and `pushClientsMars`.
 
-- IMs are pushed to **all** clients (both planets). The client-side handles delay filtering.
+- IMs are pushed to **all** clients (both planets). The pushed object includes the Chat's `users[]` so the client can determine whether to display the message given the currently-selected distribution. Comms-delay filtering is done client-side as before.
 - Report updates (`/reports/update`) are pushed to clients on the **same planet** as the author.
 - Report arrivals (after transit delay) are pushed to clients on the **target planet**.
 - Each client connects via `GET /events/:planet` and is added to the appropriate set; removed on disconnect.
