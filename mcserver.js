@@ -291,14 +291,22 @@ function newIM(content, username)
   that.transmitted = true;
 
   that.received = function () { return commsDelayPassed(that.xmitTime); }
-  
+
+  return that;
+}
+
+function newChat(users)
+{
+  var that = {};
+  that.users = users.slice().sort();
+  that.ims = [];
   return that;
 }
 
 function newSol(solNum)
 {
 	var that = { };
-  that.ims = [];
+  that.chats = [];
   that.reportsEarth = [];
   that.reportsMars = [];
 //TODO: split reports into reportsEarth and reportsMars and populate both
@@ -337,11 +345,24 @@ function newSol(solNum)
     return null;
   }
 
-  that.postIM = function (content, user)
-  {    
+  that.findOrCreateChat = function (users)
+  {
+    const sorted = users.slice().sort();
+    const key = sorted.join('\t');
+    for (let i = 0; i < that.chats.length; i++)
+      if (that.chats[i].users.join('\t') === key) return that.chats[i];
+    const chat = newChat(sorted);
+    that.chats.push(chat);
+    return chat;
+  }
+
+  that.postIM = function (content, user, targetUsers)
+  {
+    if (!targetUsers.includes(user)) targetUsers = targetUsers.concat([user]);
+    const chat = that.findOrCreateChat(targetUsers);
     const im = newIM(content, user);
-    this.ims.push(im);
-    return im;
+    chat.ims.push(im);
+    return { im, chatUsers: chat.users };
   }
 
   that.updateReport = function (name, content, approved, attachments, username)
@@ -402,7 +423,21 @@ function rehydrateReport(r)
 function rehydrateSol(s)
 {
   const fresh = newSol(s.solNum);
-  fresh.ims          = (s.ims          || []).map(im => { im.xmitTime = new Date(im.xmitTime); return im; });
+  if (s.chats)
+  {
+    fresh.chats = s.chats.map(c => {
+      const chat = newChat(c.users || []);
+      chat.ims = (c.ims || []).map(im => { im.xmitTime = new Date(im.xmitTime); return im; });
+      return chat;
+    });
+  }
+  else if (s.ims && s.ims.length > 0)
+  { // migrate: wrap legacy flat ims[] into a single "All" chat
+    const allUserNames = config.users.map(u => u.name).sort();
+    const chat = newChat(allUserNames);
+    chat.ims = s.ims.map(im => { im.xmitTime = new Date(im.xmitTime); return im; });
+    fresh.chats = [chat];
+  }
   fresh.reportsEarth = (s.reportsEarth || []).map(rehydrateReport);
   fresh.reportsMars  = (s.reportsMars  || []).map(rehydrateReport);
   return fresh;
@@ -448,11 +483,11 @@ function newDB()
     return recent && (token === user.token);
   }
 
-  that.postIM = function (message, user, token) 
-  { 
-    if (!validate(user, token)) return null; 
+  that.postIM = function (message, user, token, targetUsers)
+  {
+    if (!validate(user, token)) return null;
     log("postIM passed validation on Sol " + getSolNum() + ": " + message);
-    return that.sols[getSolNum()].postIM(message, user); 
+    return that.sols[getSolNum()].postIM(message, user, targetUsers || []);
   }
 
   that.updateReport = function (name, content, approved, attachments, user, token) 
@@ -633,6 +668,17 @@ app.get('/version', (req, res) =>
   res.status(200).json(versionInfo);
 });
 
+app.get('/users', (req, res) =>
+{
+  const users = config.users.map(u => ({ role: u.role, name: u.name, planet: u.planet }));
+  const groups = config.groups || [];
+  res.status(200).json({ users, groups });
+});
+
+app.get('/distribution-cooldown', (req, res) =>
+{
+  res.status(200).json({ distributionCooldown: config.distributionCooldown || 2 });
+});
 
 app.get('/sols/:sol', (req, res) => 
 {
@@ -645,24 +691,18 @@ app.get('/sols/:sol', (req, res) =>
 app.post('/ims', (req, res) =>
 {
   log("POSTer child for ims");
-  const { message, username, token } = req.body;
-  let im;
-  try { im = db.postIM(message, username, token); }
+  const { message, username, token, users } = req.body;
+  let result;
+  try { result = db.postIM(message, username, token, users || []); }
   catch (e) { log("postIM error: " + e.message); return res.status(400).json({ message: e.message }); }
-  if (im)
+  if (result)
   {
     res.status(200).json( { message: 'IM POSTerized' } );
+    const { im, chatUsers } = result;
+    im.chatUsers = chatUsers;
     log("distributing " + stringify(im));
-    for (let client of pushClientsEarth)
-    {
-      console.log("push to et Earth");
-      pushEvent(client, im);
-    }
-    for (let client of pushClientsMars)
-    {
-      console.log("push to et Mars");
-      pushEvent(client, im);
-    }
+    for (let client of pushClientsEarth) pushEvent(client, im);
+    for (let client of pushClientsMars)  pushEvent(client, im);
   }
   else
     res.status(401).json( { message: 'Bad user' } );

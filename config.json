@@ -5,13 +5,25 @@
     "crewNum": 53,
     "rotationLength": 14,
     "startingSolNum": 0,
-    "commsDelay": 10, 
+    "commsDelay": 10,
+    "distributionCooldown": 2,
     "dailyReports": [ "GreenHab", "Journalist", "Commander", "Operations", "EVAa", "EVAb" ],
     "specialReports": [ { "name": "Mid-rotation", "due": 5 }, { "name": "Final", "due": 11 } ],
     "users": 
     [ 
-        { "role": "Director", "name": "leszek", "word": "word", "planet": "Earth" }, { "role": "Mission Support",  "name": "armin", "word": "word", "planet": "Earth" }, 
-        { "role": "Commander", "name": "matts", "word": "word", "planet": "Mars" }, { "role": "GreenHab Officer", "name": "sean", "word": "word", "planet": "Mars" } 
+        { "role": "MC Director",  "name": "leszek", "word": "word", "planet": "Earth" }, { "role": "MC Research",  "name": "agata",  "word": "word", "planet": "Earth" }, { "role": "MC Controller", "name": "kasia",    "word": "word", "planet": "Earth" }, 
+        { "role": "MC Support 1", "name": "maria",  "word": "word", "planet": "Earth" }, { "role": "MC Support 2", "name": "armin",  "word": "word", "planet": "Earth" }, { "role": "MC Support 3",  "name": "maciej",   "word": "word", "planet": "Earth" }, 
+        { "role": "MC Medical",   "name": "anna",   "word": "word", "planet": "Earth" }, { "role": "MC IT",        "name": "marcin", "word": "word", "planet": "Earth" }, { "role": "MC Ground",     "name": "zdzislaw", "word": "word", "planet": "Earth" }, 
+
+        { "role": "Commander",      "name": "matts",  "word": "word", "planet": "Mars" }, { "role": "Executive Officer", "name": "mark",  "word": "word", "planet": "Mars" }, { "role": "Engineer",      "name": "dharani",  "word": "word", "planet": "Mars" },
+        { "role": "Biolab Officer", "name": "wiebke", "word": "word", "planet": "Mars" }, { "role": "Medical Officer",   "name": "hanna", "word": "word", "planet": "Mars" }, { "role": "Comms Officer", "name": "dharshik", "word": "word", "planet": "Mars" }
+    ],
+    "groups":
+    [
+        { "name": "Command", "roles": [ "MC Director", "Commander", "Executive Officer"] },
+        { "name": "Medical", "roles": [ "MC Medical", "Medical Officer"] },
+        { "name": "Support", "roles": [ "MC Support 1", "MC Support 3", "MC Support 3"] },
+        { "name": "Crew Support", "roles": [ "MC Support 1", "MC Support 3", "MC Support 3", "Commander", "Executive Officer", "Engineer", "Biolab Officer", "Medical Officer", "Comms Officer"] }
     ],
     "reportTemplates": 
     {
