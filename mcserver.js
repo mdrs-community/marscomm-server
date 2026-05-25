@@ -548,6 +548,25 @@ function newDB()
 
   that.save = function ()
   {
+    if (fs.existsSync('db.json'))
+    {
+      // if db.json is from a previous day, archive it as a daily backup
+      const mtime = fs.statSync('db.json').mtime;
+      const today = new Date();
+      if (mtime.toDateString() !== today.toDateString())
+      {
+        const pad = n => n.toString().padStart(2, '0');
+        const dateStr = mtime.getFullYear() + '-' + pad(mtime.getMonth()+1) + '-' + pad(mtime.getDate());
+        const daily = 'db.json.' + dateStr;
+        if (!fs.existsSync(daily))
+          fs.copyFileSync('db.json', daily);
+      }
+      // rotate rolling backups: .5 dropped, .4→.5, .3→.4, .2→.3, .1→.2, db.json→.1
+      if (fs.existsSync('db.json.5')) fs.unlinkSync('db.json.5');
+      for (let i = 4; i >= 1; i--)
+        if (fs.existsSync('db.json.' + i)) fs.renameSync('db.json.' + i, 'db.json.' + (i+1));
+      fs.renameSync('db.json', 'db.json.1');
+    }
     fs.writeFileSync('db.json.tmp', JSON.stringify(that));
     fs.renameSync('db.json.tmp', 'db.json');
   }
