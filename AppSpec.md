@@ -8,7 +8,7 @@ See also: `AppSpec.md` in the client repo (`a:/prog/misc/qooxdoo`) for the overa
 
 The MarsComm server is a Node.js/Express application that provides the backend for the MarsComm communications simulation system. It maintains an in-memory database of mission Sols, instant messages, and reports, and pushes real-time updates to connected clients via Server-Sent Events (SSE).
 
-State is automatically persisted to `db.json` after 1 minute of server idle time (no client requests), and immediately on clean shutdown (SIGINT/SIGTERM). Writes are atomic (write to `db.json.tmp`, then rename). On startup the DB is loaded from `db.json` by default if it exists. Uncaught exceptions and unhandled promise rejections trigger an emergency save before exiting.
+State is automatically persisted to `db.json` after 1 minute of server idle time (no client requests), and immediately on clean shutdown (SIGINT/SIGTERM). Writes are atomic (write to `db.json.tmp`, then rename). On startup the DB is loaded from `db.json` by default if it exists. Uncaught exceptions and unhandled promise rejections trigger an emergency save before exiting. Each save also rotates up to 5 numbered rolling backups (`db.json.1`–`db.json.5`), and if the existing `db.json` is from a previous calendar day, it is additionally archived as `db.json.YYYY-MM-DD` before being rotated out.
 
 ---
 
