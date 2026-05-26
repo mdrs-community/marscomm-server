@@ -7,7 +7,7 @@
     "startingSolNum": 0,
     "commsDelay": 10,
     "distributionCooldown": 2,
-    "dailyReports": [ "GreenHab", "Journalist", "Commander", "Operations", "EVAa", "EVAb" ],
+    "dailyReports": [ "BioLab", "Communications", "Engineering" ],
     "specialReports": [ { "name": "Mid-rotation", "due": 5 }, { "name": "Final", "due": 11 } ],
     "users": 
     [ 
@@ -27,13 +27,10 @@
     ],
     "reportTemplates": 
     {
-         "GreenHab":     "Crew {crewNum} GreenHab Report {date}<br>\nGreenHab Officer:<br>\nEnvironmental control:<br>\nAverage temperatures:<br>\nHours of supplemental light:<br>\nDaily water usage for crops: gal<br>\nDaily water usage for research and/or other purposes: gal<br>\nWater in Blue Tank: 187 gal<br>\nTime(s) of watering for crops:<br>\nChanges to crops:<br>\nNarrative:<br>\nHarvest:<br>\nSupport/supplies needed:",
-         "Journalist":   "Crew {crewNum} Journalist Report {date}<br>\nJournalist:<br>\n",
-         "Commander":    "Crew {crewNum} Commander Report {date}<br>\nCommander:<br>\n",
-         "Operations":   "<h1>Crew {crewNum} Operations Report {date}</h1><br>\nSOL: {solNum}<br> \nEngineer:<br> \nNon-nominal systems:<br> \nNotes on non-nominal systems:<br> \n<b>ROVERS</b><br>\n<b>Spirit rover used:</b><br>\nHours:<br> \nBeginning charge:<br>\nEnding charge:<br>\nCurrently charging:<br>\n<b>Opportunity rover used:</b><br>\nHours:<br> \nBeginning charge:<br> \nEnding charge:<br> \nCurrently charging:<br> \n<b>Curiosity rover used:</b><br>\nHours:<br> \nBeginning charge:<br> \nEnding charge:<br> \nCurrently charging:<br> \nGeneral notes on rovers:<br> \n<b>Summary of Hab operations:</b><br> \nWATER USE:  gal<br>\nWater (static tank):  gal<br>\nStatic tank pipe heater (on or off):<br> \nStatic tank heater (On or off):<br>\nToilet tank emptied:<br> \nSummary of internet:<br>\nSummary of suits and radios:<br>\nRadios [radio list] were used. \nEVA Suits [suit list] were used.\n<b>Summary of GreenHab operations:</b><br>\nWATER USE:  gal<br>\nHeater:<br>  \nSupplemental light:<br> \nHarvest:<br> \nSummary of ScienceDome operations:<br> \nSummary of RAM operations (Tools used, work done):<br> \nSummary of any observatory issues:<br> ",
-         "EVAa":         "TODO: add template for EVAa report",
-         "EVAb":         "TODO: add template for EVAb report",
-         "Mid-rotation": "TODO: add template for Mid-rotation report",
-         "Final":        "TODO: add template for Final report"
+         "BioLab":         "Crew {crewNum} GreenHab Report {date}<br>\nGreenHab Officer:<br>\nEnvironmental control:<br>\nAverage temperatures:<br>\nHours of supplemental light:<br>\nDaily water usage for crops: gal<br>\nDaily water usage for research and/or other purposes: gal<br>\nWater in Blue Tank: 187 gal<br>\nTime(s) of watering for crops:<br>\nChanges to crops:<br>\nNarrative:<br>\nHarvest:<br>\nSupport/supplies needed:",
+         "Communications": "Crew {crewNum} Journalist Report {date}<br>\nJournalist:<br>\n",
+         "Engineering":    "<h1>Crew {crewNum} Operations Report {date}</h1><br>\nSOL: {solNum}<br> \nEngineer:<br> \nNon-nominal systems:<br> \nNotes on non-nominal systems:<br> \n<b>ROVERS</b><br>\n<b>Spirit rover used:</b><br>\nHours:<br> \nBeginning charge:<br>\nEnding charge:<br>\nCurrently charging:<br>\n<b>Opportunity rover used:</b><br>\nHours:<br> \nBeginning charge:<br> \nEnding charge:<br> \nCurrently charging:<br> \n<b>Curiosity rover used:</b><br>\nHours:<br> \nBeginning charge:<br> \nEnding charge:<br> \nCurrently charging:<br> \nGeneral notes on rovers:<br> \n<b>Summary of Hab operations:</b><br> \nWATER USE:  gal<br>\nWater (static tank):  gal<br>\nStatic tank pipe heater (on or off):<br> \nStatic tank heater (On or off):<br>\nToilet tank emptied:<br> \nSummary of internet:<br>\nSummary of suits and radios:<br>\nRadios [radio list] were used. \nEVA Suits [suit list] were used.\n<b>Summary of GreenHab operations:</b><br>\nWATER USE:  gal<br>\nHeater:<br>  \nSupplemental light:<br> \nHarvest:<br> \nSummary of ScienceDome operations:<br> \nSummary of RAM operations (Tools used, work done):<br> \nSummary of any observatory issues:<br> ",
+         "Mid-rotation":   "TODO: add template for Mid-rotation report",
+         "Final":          "TODO: add template for Final report"
     }
 }
