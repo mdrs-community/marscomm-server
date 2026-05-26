@@ -47,7 +47,7 @@ attachments/         -- uploaded attachment files (stored by multer-generated fi
 | `commsDelay` | number | One-way communications delay in seconds; `-1` means use real Mars delay (currently falls back to 30s) |
 | `dailyReports` | string[] | Report names present every Sol |
 | `specialReports` | `{name, due}[]` | Report names present only on specific Sol numbers |
-| `users` | `{role, name, word, planet}[]` | User accounts; `word` is the password; `planet` is `"Earth"` or `"Mars"` |
+| `users` | `{role, name, word, planet, abbr?}[]` | User accounts; `word` is the password; `planet` is `"Earth"` or `"Mars"`; optional `abbr` is a short role abbreviation used by the client in Chat names (e.g. `"MCD"` for MC Director) |
 | `groups` | `{name, roles[]}[]` | Optional custom distribution groups beyond the built-in All/Mission Control/Crew. Each `roles` entry must exactly match a `role` string in `users`. |
 | `distributionCooldown` | number | Seconds the client waits after a distribution change before refreshing the chat view. Default 2. |
 | `reportTemplates` | `{name: htmlString}` | HTML templates for each report type; support placeholders `{crewNum}`, `{date}`, `{solNum}` |
@@ -159,7 +159,7 @@ Tokens are random floats assigned at login. Tokens expire daily (validated by ch
 
 | Method | Path | Response |
 |---|---|---|
-| `GET` | `/users` | `[{role, name, planet}]` — all users, no passwords |
+| `GET` | `/users` | `{ users: [{role, name, planet, abbr?}], groups: [{name, roles[]}] }` — all users (no passwords) and config groups |
 
 ### Sol Data
 
