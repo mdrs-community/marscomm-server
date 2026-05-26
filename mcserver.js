@@ -670,7 +670,7 @@ app.get('/version', (req, res) =>
 
 app.get('/users', (req, res) =>
 {
-  const users = config.users.map(u => ({ role: u.role, name: u.name, planet: u.planet }));
+  const users = config.users.map(u => { const o = { role: u.role, name: u.name, planet: u.planet }; if (u.abbr) o.abbr = u.abbr; return o; });
   const groups = config.groups || [];
   res.status(200).json({ users, groups });
 });

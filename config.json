@@ -11,19 +11,19 @@
     "specialReports": [ { "name": "Mid-rotation", "due": 5 }, { "name": "Final", "due": 11 } ],
     "users": 
     [ 
-        { "role": "MC Director",  "name": "leszek", "word": "word", "planet": "Earth" }, { "role": "MC Research",  "name": "agata",  "word": "word", "planet": "Earth" }, { "role": "MC Controller", "name": "kasia",    "word": "word", "planet": "Earth" }, 
-        { "role": "MC Support 1", "name": "maria",  "word": "word", "planet": "Earth" }, { "role": "MC Support 2", "name": "armin",  "word": "word", "planet": "Earth" }, { "role": "MC Support 3",  "name": "maciej",   "word": "word", "planet": "Earth" }, 
-        { "role": "MC Medical",   "name": "anna",   "word": "word", "planet": "Earth" }, { "role": "MC IT",        "name": "marcin", "word": "word", "planet": "Earth" }, { "role": "MC Ground",     "name": "zdzislaw", "word": "word", "planet": "Earth" }, 
+        { "role": "MC Director",  "name": "leszek", "word": "word", "planet": "Earth", "abbr": "MCD"  }, { "role": "MC Research",  "name": "agata",  "word": "word", "planet": "Earth", "abbr": "MCR"  }, { "role": "MC Controller", "name": "kasia",    "word": "word", "planet": "Earth", "abbr": "MCC"  },
+        { "role": "MC Support 1", "name": "maria",  "word": "word", "planet": "Earth", "abbr": "MCS1" }, { "role": "MC Support 2", "name": "armin",  "word": "word", "planet": "Earth", "abbr": "MCS2" }, { "role": "MC Support 3",  "name": "maciej",   "word": "word", "planet": "Earth", "abbr": "MCS3" },
+        { "role": "MC Medical",   "name": "anna",   "word": "word", "planet": "Earth", "abbr": "MCM"  }, { "role": "MC IT",        "name": "marcin", "word": "word", "planet": "Earth", "abbr": "MCIT" }, { "role": "MC Ground",     "name": "zdzislaw", "word": "word", "planet": "Earth", "abbr": "MCG"  },
 
-        { "role": "Commander",      "name": "matts",  "word": "word", "planet": "Mars" }, { "role": "Executive Officer", "name": "mark",  "word": "word", "planet": "Mars" }, { "role": "Engineer",      "name": "dharani",  "word": "word", "planet": "Mars" },
-        { "role": "Biolab Officer", "name": "wiebke", "word": "word", "planet": "Mars" }, { "role": "Medical Officer",   "name": "hanna", "word": "word", "planet": "Mars" }, { "role": "Comms Officer", "name": "dharshik", "word": "word", "planet": "Mars" }
+        { "role": "Commander",      "name": "matt",    "word": "word", "planet": "Mars", "abbr": "C"  }, { "role": "Executive Officer", "name": "mark",    "word": "word", "planet": "Mars", "abbr": "EO"  }, { "role": "Engineer",      "name": "dharani",  "word": "word", "planet": "Mars", "abbr": "E"   },
+        { "role": "Biolab Officer", "name": "wiebke",  "word": "word", "planet": "Mars", "abbr": "BO" }, { "role": "Medical Officer",   "name": "hanna",   "word": "word", "planet": "Mars", "abbr": "MO"  }, { "role": "Comms Officer", "name": "dharshik", "word": "word", "planet": "Mars", "abbr": "CO"  }
     ],
     "groups":
     [
         { "name": "Command", "roles": [ "MC Director", "Commander", "Executive Officer"] },
         { "name": "Medical", "roles": [ "MC Medical", "Medical Officer"] },
-        { "name": "Support", "roles": [ "MC Support 1", "MC Support 3", "MC Support 3"] },
-        { "name": "Crew Support", "roles": [ "MC Support 1", "MC Support 3", "MC Support 3", "Commander", "Executive Officer", "Engineer", "Biolab Officer", "Medical Officer", "Comms Officer"] }
+        { "name": "Support", "roles": [ "MC Support 1", "MC Support 2", "MC Support 3"] },
+        { "name": "Crew Support", "roles": [ "MC Support 1", "MC Support 2", "MC Support 3", "Commander", "Executive Officer", "Engineer", "Biolab Officer", "Medical Officer", "Comms Officer"] }
     ],
     "reportTemplates": 
     {
