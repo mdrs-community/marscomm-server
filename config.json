@@ -9,8 +9,9 @@
     "solDuration": "Earth",
     "commsDelay": 10,
     "distributionCooldown": 2,
-    "dailyReports": [ "BioLab", "Comms/Media", "Engineering", "Data", "EVA" ],
+    "dailyReports": [ "General", "Medical", "BioLab", "Comms/Media", "Engineering", "Data", "EVA" ],
     "specialReports": [ { "name": "Mid-rotation", "due": 6 }, { "name": "Final", "due": 13 } ],
+    "testMode": true,
     "users": 
     [ 
         { "role": "MC Director",  "name": "leszek", "word": "word", "planet": "Earth", "abbr": "MCD"  }, { "role": "MC Research",  "name": "agata",  "word": "word", "planet": "Earth", "abbr": "MCR"  }, { "role": "MC Controller", "name": "kasia",    "word": "word", "planet": "Earth", "abbr": "MCC"  },
@@ -29,6 +30,8 @@
     ],
     "reportTemplates": 
     {
+         "General":      "Crew {crewNum} General Report {date}<br>\nCommander:<br>\n",
+         "Medical":      "Crew {crewNum} Medical Report {date}<br>\nMedical Officer:<br>\n",
          "BioLab":       "Crew {crewNum} BioLab Report {date}<br>\nBioLab Officer:<br>\nEnvironmental control:<br>\nAverage temperatures:<br>\nHours of supplemental light:<br>\nDaily water usage for crops: gal<br>\nDaily water usage for research and/or other purposes: gal<br>\nWater in Blue Tank: 187 gal<br>\nTime(s) of watering for crops:<br>\nChanges to crops:<br>\nNarrative:<br>\nHarvest:<br>\nSupport/supplies needed:",
          "Comms/Media":  "Crew {crewNum} Comms/Media Report {date}<br>\nCommunications/Media Officer:<br>\n",
          "Engineering":  "Crew {crewNum} Engineering Report {date}<br>\nEngineer:<br>\n",
