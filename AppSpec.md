@@ -53,6 +53,7 @@ attachments/         -- uploaded attachment files (stored by multer-generated fi
 | `groups` | `{name, roles[]}[]` | Optional custom distribution groups beyond the built-in All/Mission Control/Crew. Each `roles` entry must exactly match a `role` string in `users`. |
 | `distributionCooldown` | number | Seconds the client waits after a distribution change before refreshing the chat view. Default 2. |
 | `messageArrivalSoundCooldown` | number | Minimum seconds between IM arrival sounds on the client. Default 180. |
+| `testMode` | boolean | If `true`, enables test/debug features on the client (e.g. Joke Mode). Default `false`. |
 | `reportTemplates` | `{name: htmlString}` | HTML templates for each report type; support placeholders `{crewNum}`, `{date}`, `{solNum}` |
 
 ---
@@ -166,6 +167,7 @@ Attachment binary data is stored by multer in the `attachments/` directory using
 | `GET` | `/organization` | `{ organization }` — `"MDRS"` or `"LunAres"` |
 | `GET` | `/distribution-cooldown` | `{ distributionCooldown }` |
 | `GET` | `/message-arrival-sound-cooldown` | `{ messageArrivalSoundCooldown }` |
+| `GET` | `/test-mode` | `{ testMode }` — whether test features are enabled |
 | `GET` | `/reports` | `string[]` — list of all report names (daily + special) |
 | `GET` | `/reports/templates` | `{ name: htmlString, ... }` — report templates |
 

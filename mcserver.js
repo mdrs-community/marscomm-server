@@ -752,6 +752,11 @@ app.get('/message-arrival-sound-cooldown', (req, res) =>
   res.status(200).json({ messageArrivalSoundCooldown: config.messageArrivalSoundCooldown ?? 180 });
 });
 
+app.get('/test-mode', (req, res) =>
+{
+  res.status(200).json({ testMode: config.testMode ?? false });
+});
+
 app.get('/sols/:sol', (req, res) => 
 {
   const sol = req.params.sol;
