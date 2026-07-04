@@ -378,11 +378,28 @@ function newSol(solNum)
     return chat;
   }
 
-  that.postIM = function (content, user, targetUsers)
+  that.editIM = function (id, content, targetUsers)
+  {
+    const sorted = targetUsers.slice().sort();
+    const key = sorted.join('\t');
+    let chat = null;
+    for (let i = 0; i < that.chats.length; i++)
+      if (that.chats[i].users.join('\t') === key) { chat = that.chats[i]; break; }
+    if (!chat) return null;
+    const im = chat.ims.find(m => m.id === id);
+    if (!im) return null;
+    im.content = content;
+    im.edited = true;
+    return { im, chatUsers: chat.users };
+  }
+
+  that.postIM = function (content, user, targetUsers, replyTo)
   {
     if (!targetUsers.includes(user)) targetUsers = targetUsers.concat([user]);
     const chat = that.findOrCreateChat(targetUsers);
     const im = newIM(content, user);
+    im.id = chat.ims.length + 1;
+    if (replyTo) im.replyTo = replyTo;
     chat.ims.push(im);
     return { im, chatUsers: chat.users };
   }
@@ -506,11 +523,17 @@ function newDB()
     return recent && (token === user.token);
   }
 
-  that.postIM = function (message, user, token, targetUsers)
+  that.postIM = function (message, user, token, targetUsers, replyTo)
   {
     if (!validate(user, token)) return null;
     log("postIM passed validation on Sol " + getSolNum() + ": " + message);
-    return that.sols[getSolNum()].postIM(message, user, targetUsers || []);
+    return that.sols[getSolNum()].postIM(message, user, targetUsers || [], replyTo);
+  }
+
+  that.editIM = function (id, content, user, token, targetUsers)
+  {
+    if (!validate(user, token)) return null;
+    return that.sols[getSolNum()].editIM(id, content, targetUsers || []);
   }
 
   that.updateReport = function (name, content, approved, attachments, user, token) 
@@ -707,6 +730,11 @@ app.get('/distribution-cooldown', (req, res) =>
   res.status(200).json({ distributionCooldown: config.distributionCooldown || 2 });
 });
 
+app.get('/message-arrival-sound-cooldown', (req, res) =>
+{
+  res.status(200).json({ messageArrivalSoundCooldown: config.messageArrivalSoundCooldown ?? 180 });
+});
+
 app.get('/sols/:sol', (req, res) => 
 {
   const sol = req.params.sol;
@@ -718,9 +746,9 @@ app.get('/sols/:sol', (req, res) =>
 app.post('/ims', (req, res) =>
 {
   log("POSTer child for ims");
-  const { message, username, token, users } = req.body;
+  const { message, username, token, users, replyTo } = req.body;
   let result;
-  try { result = db.postIM(message, username, token, users || []); }
+  try { result = db.postIM(message, username, token, users || [], replyTo); }
   catch (e) { log("postIM error: " + e.message); return res.status(400).json({ message: e.message }); }
   if (result)
   {
@@ -735,7 +763,26 @@ app.post('/ims', (req, res) =>
     res.status(401).json( { message: 'Bad user' } );
 });
 
-app.get('/reports', (req, res) => 
+app.post('/ims/edit', (req, res) =>
+{
+  const { id, message, username, token, users } = req.body;
+  let result;
+  try { result = db.editIM(id, message, username, token, users || []); }
+  catch (e) { log("editIM error: " + e.message); return res.status(400).json({ message: e.message }); }
+  if (result)
+  {
+    res.status(200).json({ message: 'IM edited' });
+    const { im, chatUsers } = result;
+    const payload = { type: "IMEdit", id: im.id, content: im.content, user: im.user,
+                      planet: im.planet, xmitTime: new Date(), chatUsers };
+    for (let client of pushClientsEarth) pushEvent(client, payload);
+    for (let client of pushClientsMars)  pushEvent(client, payload);
+  }
+  else
+    res.status(401).json({ message: 'Bad user or message not found' });
+});
+
+app.get('/reports', (req, res) =>
 {
   log("GET the reports");
   let reports = [];

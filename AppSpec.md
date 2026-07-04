@@ -52,6 +52,7 @@ attachments/         -- uploaded attachment files (stored by multer-generated fi
 | `users` | `{role, name, word, planet, abbr?}[]` | User accounts; `word` is the password; `planet` is `"Earth"` or `"Mars"`; optional `abbr` is a short role abbreviation used by the client in Chat names (e.g. `"MCD"` for MC Director) |
 | `groups` | `{name, roles[]}[]` | Optional custom distribution groups beyond the built-in All/Mission Control/Crew. Each `roles` entry must exactly match a `role` string in `users`. |
 | `distributionCooldown` | number | Seconds the client waits after a distribution change before refreshing the chat view. Default 2. |
+| `messageArrivalSoundCooldown` | number | Minimum seconds between IM arrival sounds on the client. Default 180. |
 | `reportTemplates` | `{name: htmlString}` | HTML templates for each report type; support placeholders `{crewNum}`, `{date}`, `{solNum}` |
 
 ---
@@ -116,13 +117,23 @@ A Chat is identified by its `users` set. When a new IM is POSTed, the server sea
 ```
 {
   type: "IM",
+  id: number,           // server-assigned sequential integer, scoped to the containing Chat (1, 2, 3, …)
   content: string,
   user: string,
   planet: "Earth"|"Mars",
   xmitTime: Date,
-  transmitted: true     // IMs are always transmitted immediately
+  transmitted: true,    // IMs are always transmitted immediately
+  replyTo?: {           // present only when the sender is replying to a prior IM
+    id: number,         // id of the original IM within this Chat
+    user: string,       // sender of the original IM
+    snippet: string     // first ~60 chars of original IM plain text
+  }
 }
 ```
+
+The `id` is assigned by the server at the moment the IM is appended to a Chat: `id = chat.ims.length + 1` (before push). IDs are 1-based and stable across restarts via `db.json`. IDs are scoped to a single Chat — different Chats within the same Sol may reuse the same integers.
+
+The `edited` flag is set to `true` on an IM when its content has been replaced via `POST /ims/edit`.
 
 IMs are stored inside a Chat. The server broadcasts every new IM to ALL connected clients on both planets, including the Chat's `users[]` array in the pushed payload so the client can filter by current distribution. The client is responsible for holding IMs that haven't yet "arrived" based on comms delay.
 
@@ -153,6 +164,8 @@ Attachment binary data is stored by multer in the `attachments/` directory using
 | `GET` | `/crew-num` | `{ crewNum }` |
 | `GET` | `/rotation-length` | `{ rotationLength }` |
 | `GET` | `/organization` | `{ organization }` — `"MDRS"` or `"LunAres"` |
+| `GET` | `/distribution-cooldown` | `{ distributionCooldown }` |
+| `GET` | `/message-arrival-sound-cooldown` | `{ messageArrivalSoundCooldown }` |
 | `GET` | `/reports` | `string[]` — list of all report names (daily + special) |
 | `GET` | `/reports/templates` | `{ name: htmlString, ... }` — report templates |
 
@@ -180,9 +193,10 @@ Tokens are random floats assigned at login. Tokens expire daily (validated by ch
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| `POST` | `/ims` | `{ message, username, token, users[] }` | `200` + pushes IM (with `users[]`) to all SSE clients |
+| `POST` | `/ims` | `{ message, username, token, users[], replyTo? }` | `200` + pushes IM (with `users[]`) to all SSE clients |
+| `POST` | `/ims/edit` | `{ id, message, username, token, users[] }` | `200` + pushes `IMEdit` event to all SSE clients; updates IM content in-place |
 
-`users[]` is the list of target usernames selected by the sender. The server always adds `username` to the set if not already present. The matching Chat is found by sorted `users[]` comparison, or created if none exists.
+`users[]` is the list of target usernames selected by the sender. The server always adds `username` to the set if not already present. The matching Chat is found by sorted `users[]` comparison, or created if none exists. The optional `replyTo` object (`{ id, user, snippet }`) is stored on the IM as-is; the server does not validate it.
 
 ### Reports
 
@@ -198,6 +212,7 @@ Tokens are random floats assigned at login. Tokens expire daily (validated by ch
 | `POST` | `/attachments` | Multipart upload; fields: `files[]`, `reportName`, `username`, `token`. Stored by multer. |
 | `GET` | `/attachments/:planet/:solNum` | Returns attachment list (with base64 content for client-side ZIP) |
 | `GET` | `/attachments/zip/:planet/:solNum` | Returns a ZIP file of all attachment binaries for the Sol/planet |
+| `GET` | `/attachments/download?file=<opaque>&name=<orig>` | Streams a single attachment file; `file` is the multer-generated opaque filename (validated against `[a-zA-Z0-9_.-]+`), `name` is the original filename used in `Content-Disposition`. No auth required (opaque name acts as capability token). |
 
 ### Server-Sent Events
 
@@ -221,6 +236,7 @@ Tokens are random floats assigned at login. Tokens expire daily (validated by ch
 Two sets of SSE clients are maintained: `pushClientsEarth` and `pushClientsMars`.
 
 - IMs are pushed to **all** clients (both planets). The pushed object includes the Chat's `users[]` so the client can determine whether to display the message given the currently-selected distribution. Comms-delay filtering is done client-side as before.
+- `IMEdit` events (`{ type: "IMEdit", id, content, user, planet, xmitTime, chatUsers }`) are pushed to **all** clients when a message is edited. The client applies the same comms delay as for a new IM from the same planet, then updates the rendered message label in-place (appending "(edited)" to the timestamp).
 - Report updates (`/reports/update`) are pushed to clients on the **same planet** as the author.
 - Report arrivals (after transit delay) are pushed to clients on the **target planet**.
 - Each client connects via `GET /events/:planet` and is added to the appropriate set; removed on disconnect.
