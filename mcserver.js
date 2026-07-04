@@ -404,8 +404,19 @@ function newSol(solNum)
     return { im, chatUsers: chat.users };
   }
 
+  that.resetReport = function (name)
+  {
+    const earth = that.reportsEarth.find(r => r.name === name);
+    const mars  = that.reportsMars.find(r => r.name === name);
+    if (!earth && !mars) return null;
+    function clearReport(r) { r.content = ""; r.approved = false; r.transmitted = false; r.attachments = []; r.author = ""; r.authorPlanet = ""; }
+    if (earth) clearReport(earth);
+    if (mars)  clearReport(mars);
+    return { earth, mars };
+  }
+
   that.updateReport = function (name, content, approved, attachments, username)
-  { // update Report contents on the user's planet   
+  { // update Report contents on the user's planet
     const report = that.findReportByName(name, username);
     log("updating THIS report:");
     log(report);
@@ -536,10 +547,16 @@ function newDB()
     return that.sols[getSolNum()].editIM(id, content, targetUsers || []);
   }
 
-  that.updateReport = function (name, content, approved, attachments, user, token) 
-  { 
+  that.resetReport = function (name, user, token)
+  {
+    if (!validate(user, token)) return null;
+    return that.sols[getSolNum()].resetReport(name);
+  }
+
+  that.updateReport = function (name, content, approved, attachments, user, token)
+  {
     log("updateReport(" + name + ", " + content + ", " + user + ", " + token + ")");
-    if (!validate(user, token)) return false; 
+    if (!validate(user, token)) return false;
     log("updateReport passed validation");
     const solNum = getSolNum();
     log("updating report on Sol " + solNum);
@@ -900,7 +917,21 @@ app.post('/reports/transmit/:reportName', (req, res) =>
     res.status(401).json({ message:'Bad user'});
 });
 
-app.post('/login', (req, res) => 
+app.post('/reports/reset/:reportName', (req, res) =>
+{
+  const { username, token } = req.body;
+  const name = req.params.reportName;
+  const result = db.resetReport(name, username, token);
+  if (result)
+  {
+    res.status(200).json({ message: 'Report reset' });
+    if (result.earth) for (let client of pushClientsEarth) pushEvent(client, result.earth);
+    if (result.mars)  for (let client of pushClientsMars)  pushEvent(client, result.mars);
+  }
+  else res.status(401).json({ message: 'Bad user or report not found' });
+});
+
+app.post('/login', (req, res) =>
 {
   const { username, password } = req.body;
 
