@@ -47,8 +47,7 @@ attachments/         -- uploaded attachment files (stored by multer-generated fi
 | `solDuration` | string | `"Earth"` (default) or `"Mars"`. Controls the length of one Sol used by `getSolNum()` and the client Sol time display. Only meaningful when `missionStartDate` is set. `"Earth"` = 86,400,000 ms per Sol (Sol time equals Earth time); `"Mars"` = 88,775,244 ms per Sol, drifting ~39 min/sol from Earth time. "Sol" is used in a generalised sense — analog missions use the term regardless of actual duration. |
 | `startingSolNum` | number | (unused at runtime; reference only) |
 | `commsDelay` | number | One-way communications delay in seconds; `-1` means use real Mars delay (currently falls back to 30s) |
-| `dailyReports` | string[] | Report names present every Sol |
-| `specialReports` | `{name, due}[]` | Report names present only on specific Sol numbers |
+| `reports` | `{name, due?, access[]}[]` | Unified report list. `due` absent or `"daily"` = every Sol; `due` as integer = that Sol only. `access` is a list of role names and/or group names (built-in: `"All"`, `"Mission Control"`, `"Crew"`; or custom group names). If `access` is omitted, the report is visible to all users. |
 | `users` | `{role, name, word, planet, abbr?}[]` | User accounts; `word` is the password; `planet` is `"Earth"` or `"Mars"`; optional `abbr` is a short role abbreviation used by the client in Chat names (e.g. `"MCD"` for MC Director) |
 | `groups` | `{name, roles[]}[]` | Optional custom distribution groups beyond the built-in All/Mission Control/Crew. Each `roles` entry must exactly match a `role` string in `users`. |
 | `distributionCooldown` | number | Seconds the client waits after a distribution change before refreshing the chat view. Default 2. |
@@ -168,7 +167,7 @@ Attachment binary data is stored by multer in the `attachments/` directory using
 | `GET` | `/distribution-cooldown` | `{ distributionCooldown }` |
 | `GET` | `/message-arrival-sound-cooldown` | `{ messageArrivalSoundCooldown }` |
 | `GET` | `/test-mode` | `{ testMode }` — whether test features are enabled |
-| `GET` | `/reports` | `string[]` — list of all report names (daily + special) |
+| `GET` | `/reports` | `[{name, due?, access[]}]` — all report definitions; `due` present only for Sol-specific reports; `access` present only when restricted |
 | `GET` | `/reports/templates` | `{ name: htmlString, ... }` — report templates |
 
 ### Authentication

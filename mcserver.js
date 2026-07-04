@@ -332,24 +332,12 @@ function newSol(solNum)
   that.reportsEarth = [];
   that.reportsMars = [];
 //TODO: split reports into reportsEarth and reportsMars and populate both
-  const dailyReports = config.dailyReports;
-  that.solNum = solNum;
-
   function createReports(targetArray, planet)
   {
-    for (let i = 0; i < dailyReports.length; i++)
+    for (const r of (config.reports || []))
     {
-      const report = newReport(dailyReports[i], planet);
-      targetArray.push(report);
-    }
-    const specialReports = config.specialReports;
-    for (let i = 0; i < specialReports.length; i++)
-    {
-      if (specialReports[i].due == solNum)
-      {
-        const report = newReport(specialReports[i].name, planet);
-        targetArray.push(report);
-      }
+      if (!r.due || r.due === 'daily' || r.due == solNum)
+        targetArray.push(newReport(r.name, planet));
     }
   }
   createReports(that.reportsEarth, "Earth");
@@ -807,11 +795,12 @@ app.post('/ims/edit', (req, res) =>
 app.get('/reports', (req, res) =>
 {
   log("GET the reports");
-  let reports = [];
-  for (let i = 0; i < config.dailyReports.length; i++)
-    reports.push(config.dailyReports[i]);
-  for (let i = 0; i < config.specialReports.length; i++)
-    reports.push(config.specialReports[i].name);
+  const reports = (config.reports || []).map(r => {
+    const obj = { name: r.name };
+    if (r.due && r.due !== 'daily') obj.due = r.due;
+    if (r.access && r.access.length) obj.access = r.access;
+    return obj;
+  });
   res.status(200).json(reports);
 });
 
