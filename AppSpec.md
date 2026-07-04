@@ -42,7 +42,9 @@ attachments/         -- uploaded attachment files (stored by multer-generated fi
 | `organization` | string | `"MDRS"` or `"LunAres"` — controls client branding |
 | `port` | number | HTTP port to listen on (default 8081) |
 | `crewNum` | number | Current crew rotation number |
-| `rotationLength` | number | Number of Sols in the rotation |
+| `rotationLength` | number | Number of Sols in the mission rotation (Sol 1 through Sol `rotationLength`) |
+| `missionStartDate` | string | YYYY-MM-DD date of Sol 1. If present, enables pre/post-flight phases (see Sol Navigation in client spec). If absent, server falls back to legacy behavior (today at server start = Sol 0). |
+| `solDuration` | string | `"Earth"` (default) or `"Mars"`. Controls the length of one Sol used by `getSolNum()` and the client Sol time display. Only meaningful when `missionStartDate` is set. `"Earth"` = 86,400,000 ms per Sol (Sol time equals Earth time); `"Mars"` = 88,775,244 ms per Sol, drifting ~39 min/sol from Earth time. "Sol" is used in a generalised sense — analog missions use the term regardless of actual duration. |
 | `startingSolNum` | number | (unused at runtime; reference only) |
 | `commsDelay` | number | One-way communications delay in seconds; `-1` means use real Mars delay (currently falls back to 30s) |
 | `dailyReports` | string[] | Report names present every Sol |
@@ -58,7 +60,14 @@ attachments/         -- uploaded attachment files (stored by multer-generated fi
 
 ### Sol
 
-Created at startup for each Sol index 0..rotationLength-1. Contains:
+When `missionStartDate` is configured, created at startup for Sol indices 0..rotationLength+1 (rotationLength+2 total):
+- **Sol 0** — pre-flight; accumulates all messages sent before `missionStartDate`
+- **Sol 1..rotationLength** — mission days
+- **Sol rotationLength+1** — post-flight; accumulates all messages sent after the rotation ends
+
+When `missionStartDate` is absent (legacy mode), created for indices 0..rotationLength-1 as before.
+
+Each Sol contains:
 - `solNum`: integer index
 - `chats[]`: array of Chat objects (replaces the former flat `ims[]`)
 - `reportsEarth[]`: report objects for Earth users
@@ -139,7 +148,7 @@ Attachment binary data is stored by multer in the `attachments/` directory using
 | Method | Path | Response |
 |---|---|---|
 | `GET` | `/` | `"Hello MarsComm!"` |
-| `GET` | `/ref-date` | `{ refDate }` — Sol 0 reference date (today's date at server start) |
+| `GET` | `/ref-date` | `{ refDate, missionStartDate, solDuration }` — `refDate` is one Earth day before Sol 1; `missionStartDate` is the YYYY-MM-DD string from config (null if not configured); `solDuration` is `"Earth"` or `"Mars"` |
 | `GET` | `/comms-delay` | `{ commsDelay }` — one-way delay in seconds |
 | `GET` | `/crew-num` | `{ crewNum }` |
 | `GET` | `/rotation-length` | `{ rotationLength }` |
@@ -249,5 +258,6 @@ The server listens on `config.port` (default 8081). CORS is enabled for all orig
 
 - Passwords stored in plaintext in `config.json`.
 - `commsDelay = -1` uses a sinusoidal approximation of the real Earth-Mars light travel time (182–1342 seconds), calibrated to the Jan 16 2025 opposition and accurate to ~10% through 2030. No internet lookup is performed.
-- `getSolNum()` uses today's date at server startup as Sol 0; if a report transmits across midnight, the Sol assignment may be incorrect.
+- When `missionStartDate` is configured, `getSolNum()` computes `sol = floor((now − missionStartDate_midnight) / solDurationMs) + 1` and clamps to [0, rotationLength+1], where `solDurationMs` is 86,400,000 for `"Earth"` or 88,775,244 for `"Mars"`. In legacy mode (no `missionStartDate`), `refDate` is today's date at server start, sol uses Earth day duration, and the clamp is [0, rotationLength-1].
+- If a report transmits across a Sol boundary (midnight for Earth, or the equivalent Mars sol boundary), the Sol assignment in `reportArrived()` may be off by one.
 - The `body-parser` package is used explicitly but is included in Express 4 — minor redundancy.

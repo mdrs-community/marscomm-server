@@ -79,14 +79,36 @@ function daysBetween(date1, date2)
   return daysDifference;
 }
 
+const EARTH_DAY_MS = 1000 * 60 * 60 * 24;
+const MARS_SOL_MS  = 88775244; // one Martian sol in milliseconds (24h 39m 35.244s)
+
 const now = new Date();
 const refDateStr = now.getFullYear() + "-" + (now.getMonth()+1) + "-" + now.getDate();
 log("refDateStr=" + refDateStr);
 let refDate = new Date(refDateStr);
+
+// When config.missionStartDate is set, anchor sol computation to that local midnight
+let missionStartMs = null;
+let solDurationMs  = EARTH_DAY_MS;
+if (config.missionStartDate)
+{
+  const [y, m, d] = config.missionStartDate.split('-').map(Number);
+  missionStartMs = new Date(y, m-1, d).getTime();
+  solDurationMs  = (config.solDuration === "Mars") ? MARS_SOL_MS : EARTH_DAY_MS;
+  refDate = new Date(missionStartMs - EARTH_DAY_MS); // one Earth day before Sol 1, for client reference
+  log("missionStartDate=" + config.missionStartDate + ", solDuration=" + (config.solDuration || "Earth"));
+}
+
 function getSolNum(date)
 {
   if (!date) date = new Date();
-  const sol = Math.floor((date.getTime() - refDate.getTime()) / (1000 * 60 * 60 * 24));
+  if (missionStartMs !== null)
+  {
+    const sol = Math.floor((date.getTime() - missionStartMs) / solDurationMs) + 1;
+    return Math.max(0, Math.min(sol, config.rotationLength + 1));
+  }
+  // legacy: use refDate set to today at server start
+  const sol = Math.floor((date.getTime() - refDate.getTime()) / EARTH_DAY_MS);
   return Math.max(0, Math.min(sol, config.rotationLength - 1));
 }
 
@@ -454,7 +476,8 @@ function newDB()
 
   that.sols = [];
   that.reportsInTransit = [];
-  for (let i = 0; i < config.rotationLength; i++)
+  const numSols = (missionStartMs !== null) ? config.rotationLength + 2 : config.rotationLength;
+  for (let i = 0; i < numSols; i++)
   {
     const sol = newSol(i);
     that.sols.push(sol);
@@ -611,15 +634,19 @@ function newDB()
     let ddb = JSON.parse(fs.readFileSync('db.json'));
     log("loading DB from db.json (" + ddb.sols.length + " sols)");
     that.sols = ddb.sols.map(rehydrateSol);
-    const loadedDate = new Date(ddb.refDate);
-    if (!isNaN(loadedDate.getTime()))
-    {
-      that.refDate = loadedDate;
-      refDate      = loadedDate;
+    if (missionStartMs === null)
+    { // legacy mode: restore refDate from saved DB
+      const loadedDate = new Date(ddb.refDate);
+      if (!isNaN(loadedDate.getTime()))
+      {
+        that.refDate = loadedDate;
+        refDate      = loadedDate;
+      }
+      else log("WARNING: refDate missing or invalid in db.json, keeping today as Sol 0");
     }
-    else log("WARNING: refDate missing or invalid in db.json, keeping today as Sol 0");
     // if rotationLength increased since the DB was saved, add fresh sols for the new indices
-    while (that.sols.length < config.rotationLength)
+    const targetLen = (missionStartMs !== null) ? config.rotationLength + 2 : config.rotationLength;
+    while (that.sols.length < targetLen)
       that.sols.push(newSol(that.sols.length));
     log("DB loaded successfully (" + that.sols.length + " sols)");
   }
@@ -638,9 +665,9 @@ app.get('/', (req, res) =>
   res.send('Hello MarsComm!');
 });
 
-app.get('/ref-date', (req, res) => 
+app.get('/ref-date', (req, res) =>
 {
-  res.status(200).json({ refDate: refDate });
+  res.status(200).json({ refDate: refDate, missionStartDate: config.missionStartDate || null, solDuration: config.solDuration || "Earth" });
 });
 
 app.get('/comms-delay', (req, res) => 
@@ -771,7 +798,19 @@ app.get('/attachments/zip/:planet/:solNum', async (req, res) =>
   //res.status(200).download(zip);
 });
 
-app.post('/reports/add-attachment', (req, res) => 
+app.get('/attachments/download', (req, res) =>
+{
+  const opaqueName = req.query.file;
+  const origName   = req.query.name || opaqueName;
+  if (!opaqueName || !/^[a-zA-Z0-9_.-]+$/.test(opaqueName))
+    return res.status(400).send('Invalid filename');
+  const filePath = attachDir + '/' + opaqueName;
+  if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
+  res.setHeader('Content-Disposition', 'attachment; filename="' + origName + '"');
+  fs.createReadStream(filePath).pipe(res);
+});
+
+app.post('/reports/add-attachment', (req, res) =>
 {
   const { reportName, filename, content, username, token } = req.body;
   log("got attachment for " + reportName + ": " + filename + " from " + username);
@@ -921,7 +960,7 @@ function main()
 
   log("--------------------------------------------------");
   log("refDate:    " + refDate.toDateString());
-  log("Sol:        " + getSolNum() + " of " + (config.rotationLength - 1));
+  log("Sol:        " + getSolNum() + " of " + (missionStartMs !== null ? config.rotationLength + 1 : config.rotationLength - 1));
   log("commsDelay: " + commsDelay() + " sec" + (config.commsDelay == -1 ? " (real Mars)" : " (config)"));
   log("--------------------------------------------------");
 }
