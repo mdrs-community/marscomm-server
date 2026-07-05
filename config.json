@@ -47,7 +47,19 @@
         { "name": "Mid-rotation", "access": [ "Mission Control", "Crew" ], "due": 6 },
         { "name": "Final",        "access": [ "Mission Control", "Crew" ], "due": 13 }
     ],
-    "reportTemplates": 
+    "fileSystem":
+    {
+        "folders":
+        [
+            { "path": "Mission Photos",   "access": [ "Mission Control", "Crew" ] },
+            { "path": "EVA Photos",       "access": [ "Mission Control", "Crew" ] },
+            { "path": "Biolab Data",      "access": [ "Biolab Officer", "Mission Control" ] },
+            { "path": "Medical Records",  "access": [ "Medical" ] },
+            { "path": "Engineering",      "access": [ "Engineer", "Mission Control" ] },
+            { "path": "Documents",        "access": [ "Mission Control", "Crew" ] }
+        ]
+    },
+    "reportTemplates":
     {
          "General":      "Crew {crewNum} General Report {date}<br>\nCommander:<br>\n",
          "Medical":      "Crew {crewNum} Medical Report {date}<br>\nMedical Officer:<br>\n",

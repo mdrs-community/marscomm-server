@@ -26,11 +26,13 @@ State is automatically persisted to `db.json` after 1 minute of server idle time
 ## Source Layout
 
 ```
-mcserver.js          -- entire server (single file)
+mcserver.js          -- main server (loads mcfiles.js for file-sharing routes)
+mcfiles.js           -- file-sharing routes module (Express Router; mounted at /files)
 config.json          -- configuration (organization, port, users, reports, templates, delays)
 db.json              -- optional saved DB snapshot
 package.json         -- dependencies
-attachments/         -- uploaded attachment files (stored by multer-generated filenames)
+attachments/         -- uploaded report attachment files (multer-generated filenames)
+files/               -- uploaded shared files (multer-generated filenames)
 ```
 
 ---
@@ -54,6 +56,7 @@ attachments/         -- uploaded attachment files (stored by multer-generated fi
 | `messageArrivalSoundCooldown` | number | Minimum seconds between IM arrival sounds on the client. Default 180. |
 | `testMode` | boolean | If `true`, enables test/debug features on the client (e.g. Joke Mode). Default `false`. |
 | `reportTemplates` | `{name: htmlString}` | HTML templates for each report type; support placeholders `{crewNum}`, `{date}`, `{solNum}` |
+| `fileSystem` | `{folders: [{path, access[]?}]}` | Defines the fixed folder structure for file sharing. Each folder has a `path` (display name / unique key) and an optional `access[]` list using the same role/group format as `reports[].access`. If `access` is omitted, the folder is visible to all users. |
 
 ---
 
@@ -137,6 +140,38 @@ The `edited` flag is set to `true` on an IM when its content has been replaced v
 
 IMs are stored inside a Chat. The server broadcasts every new IM to ALL connected clients on both planets, including the Chat's `users[]` array in the pushed payload so the client can filter by current distribution. The client is responsible for holding IMs that haven't yet "arrived" based on comms delay.
 
+### File
+
+File records are stored in a global `files[]` array (not scoped per Sol).
+
+```
+{
+  id: number,            // server-assigned sequential integer (1-based, global)
+  name: string,          // current filename
+  folder: string,        // current folder path (matches a config fileSystem.folders[].path)
+  size: number,          // bytes
+  storedAs: string,      // multer-generated opaque filename in files/ directory
+  uploadedBy: string,    // username of uploader
+  planet: "Earth"|"Mars",
+  xmitTime: Date,        // when uploaded
+  deleted: boolean,      // true = soft-deleted (not served for download; hidden after delay)
+  prevOp?: {             // set when a rename/move/delete is in transit to the other planet
+    op: "rename"|"move"|"delete",
+    planet: "Earth"|"Mars",  // planet that initiated the operation
+    xmitTime: Date,
+    prevName?: string,   // name before rename (present for op="rename")
+    prevFolder?: string  // folder before move (present for op="move")
+  }
+}
+```
+
+**prevOp lifecycle:**
+- Set by the server when processing a rename, move, or delete mutation.
+- The server clears `prevOp` from the record once `prevOp.xmitTime + commsDelay` has elapsed (checked lazily on next `GET /files`).
+- Clients use `prevOp` on reconnect to reconstruct the in-transit view without SSE replay.
+
+File binaries are stored by multer in the `files/` directory using opaque filenames (`storedAs`). Downloads are streamed via `GET /files/download?id=<id>`.
+
 ### Attachment
 
 ```
@@ -215,6 +250,21 @@ Tokens are random floats assigned at login. Tokens expire daily (validated by ch
 | `GET` | `/attachments/zip/:planet/:solNum` | Returns a ZIP file of all attachment binaries for the Sol/planet |
 | `GET` | `/attachments/download?file=<opaque>&name=<orig>` | Streams a single attachment file; `file` is the multer-generated opaque filename (validated against `[a-zA-Z0-9_.-]+`), `name` is the original filename used in `Content-Disposition`. No auth required (opaque name acts as capability token). |
 
+### Files
+
+File storage is handled by a separate module (`mcfiles.js`) loaded by `mcserver.js`. File binaries are stored by multer in the `files/` directory.
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| `GET` | `/files` | — | Array of all non-deleted file records (plus soft-deleted records whose `prevOp.xmitTime + commsDelay` has not elapsed for either planet). Auth not required (access filtering is client-side). |
+| `POST` | `/files/upload` | Multipart; fields: `files[]`, `folder`, `username`, `token` | `200`; creates File records; pushes `FileUpdate` (op=`"add"`) to all SSE clients |
+| `POST` | `/files/rename` | `{ id, name, username, token }` | `200`; sets `prevOp={op:"rename", planet, xmitTime, prevName}` then updates `name`; pushes `FileUpdate` (op=`"rename"`) to all SSE clients |
+| `POST` | `/files/move` | `{ id, folder, username, token }` | `200`; sets `prevOp={op:"move", planet, xmitTime, prevFolder}` then updates `folder`; pushes `FileUpdate` (op=`"move"`) to all SSE clients |
+| `POST` | `/files/delete` | `{ id, username, token }` | `200`; sets `prevOp={op:"delete", planet, xmitTime}` then sets `deleted:true`; pushes `FileUpdate` (op=`"delete"`) to all SSE clients |
+| `GET` | `/files/download?id=<id>` | — | Streams the file binary; `Content-Disposition: attachment; filename="<name>"`. No auth required (numeric ID is not guessable enough for sensitive data). |
+
+`GET /files` lazily clears expired `prevOp` fields before serializing: if `prevOp.xmitTime + commsDelay < now`, `prevOp` is deleted from the record in memory before the response is sent.
+
 ### Server-Sent Events
 
 | Method | Path | Notes |
@@ -240,6 +290,7 @@ Two sets of SSE clients are maintained: `pushClientsEarth` and `pushClientsMars`
 - `IMEdit` events (`{ type: "IMEdit", id, content, user, planet, xmitTime, chatUsers }`) are pushed to **all** clients when a message is edited. The client applies the same comms delay as for a new IM from the same planet, then updates the rendered message label in-place (appending "(edited)" to the timestamp).
 - Report updates (`/reports/update`) are pushed to clients on the **same planet** as the author.
 - Report arrivals (after transit delay) are pushed to clients on the **target planet**.
+- `FileUpdate` events (`{ type: "FileUpdate", op: "add"|"rename"|"move"|"delete", file: <FileRecord> }`) are pushed to **all** clients on file mutations. The client applies commsDelay for events whose `file.planet` differs from the viewer's planet before updating the UI.
 - Each client connects via `GET /events/:planet` and is added to the appropriate set; removed on disconnect.
 
 ---

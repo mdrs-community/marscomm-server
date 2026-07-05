@@ -212,6 +212,17 @@ function findUserByName(name)
   return null;
 }
 
+function validate(name, token)
+{
+  const user = findUserByName(name);
+  if (!user) return false;
+  const recent = user.loginTime && ((new Date() - user.loginTime) < 24 * 3600 * 1000);
+  log("validating " + name + ", " + token + "; recent=" + recent + ", user=" + JSON.stringify(user));
+  return recent && (token === user.token);
+}
+
+const fileModule = require('./mcfiles');
+
 // for simplicity, attachment content is carried around as base64 string right from the moment it is uploaded, until 
 // the last moment when we need to write binary to the zip file 
 function newAttachment(reportName, filename, content)
@@ -513,15 +524,6 @@ function newDB()
     return { token: user.token, planet: user.planet };
   }
 
-  function validate(name, token)
-  {
-    const user = findUserByName(name);
-    if (!user) return false;
-    const recent = user.loginTime && ((new Date() - user.loginTime) < 24 * 3600 * 1000);
-    log("validating " + name + ", " + token + "; recent=" + recent + ", user=" + JSON.stringify(user));
-    return recent && (token === user.token);
-  }
-
   that.postIM = function (message, user, token, targetUsers, replyTo)
   {
     if (!validate(user, token)) return null;
@@ -653,7 +655,8 @@ function newDB()
         if (fs.existsSync('db.json.' + i)) fs.renameSync('db.json.' + i, 'db.json.' + (i+1));
       fs.renameSync('db.json', 'db.json.1');
     }
-    fs.writeFileSync('db.json.tmp', JSON.stringify(that));
+    const saveData = { refDate: that.refDate, sols: that.sols, reportsInTransit: that.reportsInTransit, files: fileModule.getFiles() };
+    fs.writeFileSync('db.json.tmp', JSON.stringify(saveData));
     fs.renameSync('db.json.tmp', 'db.json');
   }
   that.load = function ()
@@ -662,6 +665,7 @@ function newDB()
     let ddb = JSON.parse(fs.readFileSync('db.json'));
     log("loading DB from db.json (" + ddb.sols.length + " sols)");
     that.sols = ddb.sols.map(rehydrateSol);
+    if (ddb.files) fileModule.setFiles(ddb.files);
     if (missionStartMs === null)
     { // legacy mode: restore refDate from saved DB
       const loadedDate = new Date(ddb.refDate);
@@ -976,6 +980,11 @@ function pushToLocal(obj) // push this object to all clients on whatever planet 
   if (obj.planet === "Earth") pushToEarth(obj);
   else                        pushToMars(obj);
 }
+function pushToBoth(obj)
+{
+  for (let client of pushClientsEarth) pushEvent(client, obj);
+  for (let client of pushClientsMars)  pushEvent(client, obj);
+}
 
 app.get('/events/:planet', (req, res) => 
 {
@@ -1029,6 +1038,8 @@ function main()
     else log("reset: no db.json to rename, starting fresh");
   }
   else db.load();
+
+  fileModule.register(app, config, pushToBoth, validate);
 
   log("--------------------------------------------------");
   log("refDate:    " + refDate.toDateString());
