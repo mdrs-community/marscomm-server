@@ -51,13 +51,14 @@
     {
         "folders":
         [
-            { "path": "Mission Photos",   "access": [ "Mission Control", "Crew" ] },
-            { "path": "Photos/Mission",   "access": [ "Mission Control", "Crew" ] },
-            { "path": "Photos/EVA",       "access": [ "Mission Control", "Crew" ] },
-            { "path": "Biolab Data",      "access": [ "Biolab Officer", "Mission Control" ] },
-            { "path": "Medical Records",  "access": [ "Medical" ] },
-            { "path": "Engineering",      "access": [ "Engineer", "Mission Control" ] },
-            { "path": "Documents",        "access": [ "Mission Control", "Crew" ] }
+            { "path": "Photos/Mission",    "access": [ "Mission Control", "Crew" ] },
+            { "path": "Photos/EVA",        "access": [ "Mission Control", "Crew" ] },
+            { "path": "Photos/Preflight",  "access": [ "Mission Control", "Crew" ] },
+            { "path": "Photos/Postflight", "access": [ "Mission Control", "Crew" ] },
+            { "path": "Biolab Data",       "access": [ "Biolab Officer", "Mission Control" ] },
+            { "path": "Medical Records",   "access": [ "Medical" ] },
+            { "path": "Engineering",       "access": [ "Engineer", "Mission Control" ] },
+            { "path": "Documents",         "access": [ "Mission Control", "Crew" ] }
         ]
     },
     "reportTemplates":
