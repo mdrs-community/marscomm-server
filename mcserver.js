@@ -9,13 +9,10 @@ install qooxdoo in the repo
 
 const fs                   = require('fs');
 const express              = require('express');
-const bodyParser           = require('body-parser');
 const config               = require('./config.json');
 const cors                 = require('cors');
-const { report }           = require('process');
 const multer               = require("multer");
 const JSZip                = require('jszip');
-const { log }              = require('console');
 const { execSync }         = require('child_process');
 
 const app = express();
@@ -23,7 +20,7 @@ const app = express();
 const attachDir = 'attachments';
 const multerd = multer({ dest: attachDir });
 
-app.use(bodyParser.json());
+app.use(express.json());
 app.use(cors());
 app.use((req, res, next) => { resetIdleTimer(); next(); });
 
@@ -34,11 +31,6 @@ let cargs = {};
 global.log = function (str) { console.log(str); }
 global.logv = function (str) { if (verbose) console.log(str); }
 function stringify(obj) { return JSON.stringify(obj, null, 2); }
-function isnum(val) { return /^\d+$/.test(val);	}
-function isArray (value) { return value && typeof value === 'object' && value.constructor === Array; }
-function assert(condition, str) { if (!condition) { log("ERROR: " + str); throw condition; } }
-
-function sleep(ms) { return new Promise((resolve) => { setTimeout(resolve, ms); }); }
 
 function formatTimestamp(date)
 {
@@ -67,16 +59,6 @@ function resetIdleTimer()
 {
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = setTimeout(function() { if (db) { log("idle timeout - saving DB"); db.save(); } }, 60 * 1000);
-}
-
-function daysBetween(date1, date2) 
-{
-  // Ensure that date1 and date2 are valid Date objects
-  if (!(date1 instanceof Date) || !(date2 instanceof Date)) { throw new Error("Both arguments must be valid Date objects"); }
-  const timeDifference = Math.abs(date2 - date1); // Get the time difference in milliseconds
-  const millisecondsPerDay = 1000 * 60 * 60 * 24;
-  const daysDifference = Math.floor(timeDifference / millisecondsPerDay);
-  return daysDifference;
 }
 
 const EARTH_DAY_MS = 1000 * 60 * 60 * 24;
@@ -420,7 +402,7 @@ function newSol(solNum)
     log("updating THIS report:");
     log(report);
     if (report) report.update(content, approved, attachments, username);
-    else Log("can't update non-existant report " + name);
+    else log("can't update non-existant report " + name);
     return report;
   }
 
@@ -449,7 +431,7 @@ function newSol(solNum)
   {
     const report = that.findReportByName(name, username);
     if (report) report.transmit(username);
-    else Log("can't transmit non-existant report " + name);
+    else log("can't transmit non-existant report " + name);
     return report;
   }
 
@@ -550,19 +532,9 @@ function newDB()
     log("updateReport passed validation");
     const solNum = getSolNum();
     log("updating report on Sol " + solNum);
-    const report = that.sols[solNum].updateReport(name, content, approved, attachments, user); 
-    pushToLocal(report);
-    return true;
-  }
-
-  that.addAttachment = function (reportName, filename, content, username, token)
-  {
-    if (!validate(username, token)) return null; 
-    const solNum = getSolNum();
-    log("report " + reportName + " getting some " + filename + " on Sol " + solNum);
-    const attachment = that.sols[solNum].addAttachment(reportName, filename, content, username); 
-    log(attachment);
-    return attachment;
+    const report = that.sols[solNum].updateReport(name, content, approved, attachments, user);
+    if (report) pushToLocal(report);
+    return !!report;
   }
 
   that.addAttachments = function (reportName, files, username, token)
@@ -628,9 +600,10 @@ function newDB()
     const solNum = getSolNum();
     log("transmitting report on Sol " + solNum);
     const report = that.sols[solNum].transmitReport(name, user);
+    if (!report) return null;
     that.reportsInTransit.push(newReport(name, report.planet, report));
     pushToLocal(report);
-    setTimeout(() => that.reportArrived(), config.commsDelay*1000);
+    setTimeout(() => that.reportArrived(), commsDelay()*1000);
     return report;
   }
 
@@ -666,6 +639,14 @@ function newDB()
     log("loading DB from db.json (" + ddb.sols.length + " sols)");
     that.sols = ddb.sols.map(rehydrateSol);
     if (ddb.files) fileModule.setFiles(ddb.files);
+    // restore reports that were in transit when the server last stopped, and reschedule their arrival
+    that.reportsInTransit = (ddb.reportsInTransit || []).map(r => { r.xmitTime = new Date(r.xmitTime); return r; });
+    for (const rit of that.reportsInTransit)
+    {
+      const remaining = Math.max(0, commsDelay()*1000 - (Date.now() - rit.xmitTime.getTime()));
+      log("rescheduling in-transit report " + rit.name + " to arrive in " + Math.round(remaining/1000) + " sec");
+      setTimeout(() => that.reportArrived(), remaining);
+    }
     if (missionStartMs === null)
     { // legacy mode: restore refDate from saved DB
       const loadedDate = new Date(ddb.refDate);
@@ -749,12 +730,13 @@ app.get('/test-mode', (req, res) =>
   res.status(200).json({ testMode: config.testMode ?? false });
 });
 
-app.get('/sols/:sol', (req, res) => 
+app.get('/sols/:sol', (req, res) =>
 {
-  const sol = req.params.sol;
-  log("getting Sol " + sol);
-  log(db.sols[sol]);
-  res.status(200).json(db.sols[sol]);
+  const sol = db.sols[req.params.sol];
+  log("getting Sol " + req.params.sol);
+  if (!sol) return res.status(404).json({ message: 'No such Sol' });
+  log(sol);
+  res.status(200).json(sol);
 });
 
 app.post('/ims', (req, res) =>
@@ -872,17 +854,7 @@ app.get('/attachments/download', (req, res) =>
   fs.createReadStream(filePath).pipe(res);
 });
 
-app.post('/reports/add-attachment', (req, res) =>
-{
-  const { reportName, filename, content, username, token } = req.body;
-  log("got attachment for " + reportName + ": " + filename + " from " + username);
-  if (db.addAttachment(reportName, filename, content, username, token))
-    res.status(200).json({ message:'attachmentized'});
-  else
-    res.status(401).json({ message:'Bad user'});
-});
-
-app.post('/attachments', multerd.array('files'), (req, res) => 
+app.post('/attachments', multerd.array('files'), (req, res) =>
 {
   log("attach this");
   if (!req.files) 
@@ -1039,7 +1011,7 @@ function main()
   }
   else db.load();
 
-  fileModule.register(app, config, pushToBoth, validate);
+  fileModule.register(app, config, pushToBoth, validate, commsDelay);
 
   log("--------------------------------------------------");
   log("refDate:    " + refDate.toDateString());

@@ -1,5 +1,5 @@
 /* MarsComm file-sharing routes
-   Registered into the Express app by calling module.exports.register(app, config, pushAll, validate).
+   Registered into the Express app by calling module.exports.register(app, config, pushAll, validate, commsDelaySec).
    Files are stored in the 'files/' directory by multer.
    Call getFiles()/setFiles() to integrate with DB save/load. */
 
@@ -12,6 +12,7 @@ const multerd = multer({ dest: filesDir });
 
 let files  = [];
 let nextId = 1;
+let commsDelaySec = () => 0; // supplied by mcserver via register(); returns the one-way delay in seconds
 
 function rehydrateFile(f)
 {
@@ -21,11 +22,7 @@ function rehydrateFile(f)
   return r;
 }
 
-function getCommsDelayMs(config)
-{
-  const s = (config.commsDelay == -1) ? 30 : (config.commsDelay || 0);
-  return s * 1000;
-}
+function getCommsDelayMs() { return commsDelaySec() * 1000; }
 
 function getUserPlanet(config, username)
 {
@@ -33,19 +30,19 @@ function getUserPlanet(config, username)
   return u ? u.planet : 'Earth';
 }
 
-function clearExpiredPrevOps(config)
+function clearExpiredPrevOps()
 {
-  const delay = getCommsDelayMs(config);
+  const delay = getCommsDelayMs();
   const now   = Date.now();
   for (const f of files)
     if (f.prevOp && (now - f.prevOp.xmitTime.getTime()) > delay)
       delete f.prevOp;
 }
 
-function visibleFiles(config)
+function visibleFiles()
 {
-  clearExpiredPrevOps(config);
-  const delay = getCommsDelayMs(config);
+  clearExpiredPrevOps();
+  const delay = getCommsDelayMs();
   const now   = Date.now();
   // Include deleted files while their prevOp is still in transit (other planet hasn't seen the delete yet)
   return files.filter(f => !f.deleted ||
@@ -61,8 +58,9 @@ module.exports = {
     nextId = files.length ? Math.max(...files.map(f => f.id)) + 1 : 1;
   },
 
-  register(app, config, pushAll, validate)
+  register(app, config, pushAll, validate, commsDelayFn)
   {
+    if (commsDelayFn) commsDelaySec = commsDelayFn;
     app.get('/files/folders', (req, res) =>
     {
       res.status(200).json((config.fileSystem && config.fileSystem.folders) || []);
@@ -70,7 +68,7 @@ module.exports = {
 
     app.get('/files', (req, res) =>
     {
-      res.status(200).json(visibleFiles(config));
+      res.status(200).json(visibleFiles());
     });
 
     app.post('/files/upload', multerd.array('files'), (req, res) =>
