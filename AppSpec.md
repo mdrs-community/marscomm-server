@@ -27,9 +27,12 @@ State is automatically persisted to `db.json` after 1 minute of server idle time
 
 ```
 mcserver.js          -- main server (loads mcfiles.js for file-sharing routes)
-mcfiles.js           -- file-sharing routes module (Express Router; mounted at /files)
+mcfiles.js           -- file-sharing routes module (registers /files* routes on the Express app)
+serverStats.js       -- standalone tool: analyze a db.json and print message statistics
+                        (node serverStats.js [dbfile] [firstSol] [lastSol]); not loaded by the server
 config.json          -- configuration (organization, port, users, reports, templates, delays)
-db.json              -- optional saved DB snapshot
+config.md            -- hand-maintained reference documentation for config.json parameters
+db.json              -- optional saved DB snapshot (plus rolling/daily backups db.json.1-5, db.json.YYYY-MM-DD)
 package.json         -- dependencies
 attachments/         -- uploaded report attachment files (multer-generated filenames)
 files/               -- uploaded shared files (multer-generated filenames)
@@ -48,7 +51,8 @@ files/               -- uploaded shared files (multer-generated filenames)
 | `missionStartDate` | string | YYYY-MM-DD date of Sol 1. If present, enables pre/post-flight phases (see Sol Navigation in client spec). If absent, server falls back to legacy behavior (today at server start = Sol 0). |
 | `solDuration` | string | `"Earth"` (default) or `"Mars"`. Controls the length of one Sol used by `getSolNum()` and the client Sol time display. Only meaningful when `missionStartDate` is set. `"Earth"` = 86,400,000 ms per Sol (Sol time equals Earth time); `"Mars"` = 88,775,244 ms per Sol, drifting ~39 min/sol from Earth time. "Sol" is used in a generalised sense — analog missions use the term regardless of actual duration. |
 | `startingSolNum` | number | (unused at runtime; reference only) |
-| `commsDelay` | number | One-way communications delay in seconds; `-1` means use real Mars delay (currently falls back to 30s) |
+| `commsDelay` | number | One-way communications delay in seconds; `-1` means use the real Earth-Mars delay, computed by a sinusoidal approximation (see Known Limitations). Note: the file-sharing module (`mcfiles.js`) does not use the approximation — with `-1` it falls back to a fixed 30 s for file transit windows. |
+| `clientPath` | string | Optional path to the client repo, used to gather client git version info for `GET /version` (default `../misc/qooxdoo`) |
 | `reports` | `{name, due?, access[]}[]` | Unified report list. `due` absent or `"daily"` = every Sol; `due` as integer = that Sol only. `access` is a list of role names and/or group names (built-in: `"All"`, `"Mission Control"`, `"Crew"`; or custom group names). If `access` is omitted, the report is visible to all users. |
 | `users` | `{role, name, word, planet, abbr?}[]` | User accounts; `word` is the password; `planet` is `"Earth"` or `"Mars"`; optional `abbr` is a short role abbreviation used by the client in Chat names (e.g. `"MCD"` for MC Director) |
 | `groups` | `{name, roles[]}[]` | Optional custom distribution groups beyond the built-in All/Mission Control/Crew. Each `roles` entry must exactly match a `role` string in `users`. |
@@ -113,7 +117,8 @@ A Chat is identified by its `users` set. When a new IM is POSTed, the server sea
 1. Reports are created empty at server startup (never created/destroyed by client requests, except copies in transit).
 2. `POST /reports/update` — updates content/approval on the author's planet copy.
 3. `POST /reports/transmit/:name` — marks the report transmitted, clones it into `reportsInTransit[]`, and schedules `reportArrived()` after `commsDelay` seconds. On arrival, the target planet's copy is updated from the clone, and the clone is discarded.
-4. All mutations push real-time updates to the affected planet's SSE clients.
+4. `POST /reports/reset/:name` — clears both planets' copies back to Empty (content, approval, attachments, transmitted state).
+5. All mutations push real-time updates to the affected planet's SSE clients.
 
 ### IM (Instant Message)
 
@@ -202,6 +207,7 @@ Attachment binary data is stored by multer in the `attachments/` directory using
 | `GET` | `/distribution-cooldown` | `{ distributionCooldown }` |
 | `GET` | `/message-arrival-sound-cooldown` | `{ messageArrivalSoundCooldown }` |
 | `GET` | `/test-mode` | `{ testMode }` — whether test features are enabled |
+| `GET` | `/version` | `{ server: {tag, hash, date}, client: {tag, hash, date} }` — git tag/short-hash/commit-date of both repos, gathered once at startup via `git describe`/`rev-parse` (client repo located via config `clientPath`) |
 | `GET` | `/reports` | `[{name, due?, access[]}]` — all report definitions; `due` present only for Sol-specific reports; `access` present only when restricted |
 | `GET` | `/reports/templates` | `{ name: htmlString, ... }` — report templates |
 
@@ -211,7 +217,7 @@ Attachment binary data is stored by multer in the `attachments/` directory using
 |---|---|---|---|
 | `POST` | `/login` | `{ username, password }` | `{ token, planet }` on success; `401` on failure |
 
-Tokens are random floats assigned at login. Tokens expire daily (validated by checking `loginTime` is today).
+Tokens are random floats assigned at login. Tokens expire 24 hours after login (validated by checking that `loginTime` is within the last 24 hours).
 
 ### Users
 
@@ -240,12 +246,14 @@ Tokens are random floats assigned at login. Tokens expire daily (validated by ch
 |---|---|---|---|
 | `POST` | `/reports/update` | `{ reportName, content, approved, attachments, username, token }` | `200` + pushes Report to local planet SSE clients |
 | `POST` | `/reports/transmit/:reportName` | `{ username, token }` | `200`; schedules arrival on other planet after comms delay |
+| `POST` | `/reports/reset/:reportName` | `{ username, token }` | `200`; clears content/approval/attachments/state of the named report on **both** planets for the current Sol and pushes each planet's cleared copy to its SSE clients |
 
 ### Attachments
 
 | Method | Path | Notes |
 |---|---|---|
 | `POST` | `/attachments` | Multipart upload; fields: `files[]`, `reportName`, `username`, `token`. Stored by multer. |
+| `POST` | `/reports/add-attachment` | Legacy JSON endpoint (`{ reportName, filename, content, username, token }`) that adds a single attachment record; superseded by the multipart `/attachments` endpoint and no longer called by the client |
 | `GET` | `/attachments/:planet/:solNum` | Returns attachment list (with base64 content for client-side ZIP) |
 | `GET` | `/attachments/zip/:planet/:solNum` | Returns a ZIP file of all attachment binaries for the Sol/planet |
 | `GET` | `/attachments/download?file=<opaque>&name=<orig>` | Streams a single attachment file; `file` is the multer-generated opaque filename (validated against `[a-zA-Z0-9_.-]+`), `name` is the original filename used in `Content-Disposition`. No auth required (opaque name acts as capability token). |
@@ -256,6 +264,7 @@ File storage is handled by a separate module (`mcfiles.js`) loaded by `mcserver.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
+| `GET` | `/files/folders` | — | Folder definitions from config `fileSystem.folders` (`[{path, access?}]`); no auth required |
 | `GET` | `/files` | — | Array of all non-deleted file records (plus soft-deleted records whose `prevOp.xmitTime + commsDelay` has not elapsed for either planet). Auth not required (access filtering is client-side). |
 | `POST` | `/files/upload` | Multipart; fields: `files[]`, `folder`, `username`, `token` | `200`; creates File records; pushes `FileUpdate` (op=`"add"`) to all SSE clients |
 | `POST` | `/files/rename` | `{ id, name, username, token }` | `200`; sets `prevOp={op:"rename", planet, xmitTime, prevName}` then updates `name`; pushes `FileUpdate` (op=`"rename"`) to all SSE clients |
@@ -299,7 +308,7 @@ Two sets of SSE clients are maintained: `pushClientsEarth` and `pushClientsMars`
 
 | Argument | Effect |
 |---|---|
-| `reset` | Rename `db.json` to `db.json.<yyyymmdd_hhmmss>` and start with a fresh empty DB |
+| `reset` (aliases `--reset`, `--restart`) | Rename `db.json` to `db.json.<yyyymmdd_hhmmss>` and start with a fresh empty DB |
 | `verbose` | Enable verbose logging |
 | `help` | Print usage and exit |
 
@@ -311,11 +320,11 @@ Two sets of SSE clients are maintained: `pushClientsEarth` and `pushClientsMars`
 # Install dependencies
 npm install
 
-# Start with default (empty) DB
+# Start (automatically restores db.json if it exists)
 node mcserver.js
 
-# Start and restore saved DB
-node mcserver.js loadDB
+# Archive any existing db.json and start with a fresh empty DB
+node mcserver.js reset
 ```
 
 The server listens on `config.port` (default 8081). CORS is enabled for all origins.
@@ -328,4 +337,6 @@ The server listens on `config.port` (default 8081). CORS is enabled for all orig
 - `commsDelay = -1` uses a sinusoidal approximation of the real Earth-Mars light travel time (182–1342 seconds), calibrated to the Jan 16 2025 opposition and accurate to ~10% through 2030. No internet lookup is performed.
 - When `missionStartDate` is configured, `getSolNum()` computes `sol = floor((now − missionStartDate_midnight) / solDurationMs) + 1` and clamps to [0, rotationLength+1], where `solDurationMs` is 86,400,000 for `"Earth"` or 88,775,244 for `"Mars"`. In legacy mode (no `missionStartDate`), `refDate` is today's date at server start, sol uses Earth day duration, and the clamp is [0, rotationLength-1].
 - If a report transmits across a Sol boundary (midnight for Earth, or the equivalent Mars sol boundary), the Sol assignment in `reportArrived()` may be off by one.
+- The report-arrival timer in `transmitReport()` uses `config.commsDelay * 1000` directly rather than the `commsDelay()` function, so when `commsDelay = -1` (real Mars delay) the timeout is negative and the report arrives on the other planet immediately. Report transit only works correctly with a fixed non-negative `commsDelay`.
+- `reportsInTransit` is included in `db.json` saves but is never restored by `load()`, and arrival timers do not survive a restart — a report that is in transit when the server stops will never arrive on the other planet.
 - The `body-parser` package is used explicitly but is included in Express 4 — minor redundancy.
